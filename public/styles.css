@@ -1,0 +1,646 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%), url('/background/background.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: #333333;
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+.page.hidden {
+    display: none;
+}
+
+/* Auth Page Styles */
+.auth-container {
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 40px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.logo-icon {
+    font-size: 32px;
+}
+
+.logo-text {
+    font-size: 24px;
+    font-weight: 600;
+    color: #333333;
+}
+
+.auth-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666666;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.auth-tab.active {
+    background: white;
+    color: #333333;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.auth-form {
+    display: none;
+}
+
+.auth-form.active {
+    display: block;
+}
+
+.auth-form input {
+    width: 100%;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+    background: white;
+}
+
+.auth-form input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Main App Container */
+.app-container {
+    display: flex;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 250px;
+    background: rgba(255, 255, 255, 0.98);
+    padding: 20px;
+    border-right: 1px solid #e5e5e5;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-header {
+    margin-bottom: 20px;
+}
+
+.compose-btn {
+    width: 100%;
+    padding: 14px 20px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 24px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.compose-btn:hover {
+    background: #5568d3;
+    transform: translateY(-1px);
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666666;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    background: #f5f5f5;
+}
+
+.nav-item.active {
+    background: #e8eaf6;
+    color: #667eea;
+}
+
+.nav-item span:first-child {
+    margin-right: 12px;
+}
+
+.badge {
+    background: #667eea;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.caffeena-section {
+    margin-top: auto;
+    padding: 20px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.caffeena-avatar {
+    font-size: 48px;
+    margin-bottom: 10px;
+}
+
+.caffeena-name {
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #333333;
+}
+
+.btn-caffeena {
+    width: 100%;
+    padding: 10px 20px;
+    background: #667eea;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.btn-caffeena:hover {
+    background: #5568d3;
+}
+
+/* Main Content Styles */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header Styles */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background: rgba(255, 255, 255, 0.98);
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.search-bar {
+    display: flex;
+    align-items: center;
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 8px 16px;
+    width: 400px;
+}
+
+.search-icon {
+    margin-right: 12px;
+    color: #999999;
+}
+
+.search-bar input {
+    border: none;
+    background: none;
+    font-size: 14px;
+    width: 100%;
+    outline: none;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* Content Views */
+.content-views {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.view {
+    display: none;
+}
+
+.view.active {
+    display: block;
+}
+
+.view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.view-header h2 {
+    font-size: 20px;
+    color: #333333;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* Mail List Styles */
+.mail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mail-item {
+    padding: 16px 20px;
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.mail-item:hover {
+    background: #f8f9fa;
+    border-color: #667eea;
+    transform: translateX(4px);
+}
+
+.mail-item.unread {
+    border-left: 4px solid #667eea;
+    background: #f8f9ff;
+}
+
+.mail-checkbox {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e5e5e5;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mail-checkbox.checked {
+    background: #667eea;
+    border-color: #667eea;
+}
+
+.mail-content {
+    flex: 1;
+}
+
+.mail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.mail-sender {
+    font-weight: 600;
+    color: #333333;
+}
+
+.mail-subject {
+    font-size: 14px;
+    color: #666666;
+    margin-bottom: 4px;
+}
+
+.mail-preview {
+    font-size: 13px;
+    color: #999999;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mail-date {
+    font-size: 12px;
+    color: #999999;
+    white-space: nowrap;
+}
+
+/* Compose Form Styles */
+.compose-form {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid #e5e5e5;
+}
+
+.compose-form input,
+.compose-form textarea {
+    width: 100%;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.2s;
+    background: white;
+}
+
+.compose-form input:focus,
+.compose-form textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.compose-form textarea {
+    min-height: 200px;
+    resize: vertical;
+}
+
+.compose-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* Mail Detail Styles */
+.mail-detail {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid #e5e5e5;
+}
+
+.mail-detail-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.mail-detail-subject {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #333333;
+}
+
+.mail-detail-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #666666;
+}
+
+.mail-detail-body {
+    line-height: 1.8;
+    color: #333333;
+}
+
+/* Button Styles */
+.btn-primary {
+    padding: 12px 24px;
+    background: #667eea;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    background: #5568d3;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    padding: 8px 16px;
+    background: #f5f5f5;
+    color: #333333;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: #e5e5e5;
+}
+
+.btn-icon {
+    padding: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.btn-icon:hover {
+    background: #f5f5f5;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.caffeena-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.caffeena-avatar-large {
+    font-size: 40px;
+}
+
+.caffeena-header h3 {
+    font-size: 18px;
+    color: #333333;
+}
+
+.caffeena-status {
+    font-size: 12px;
+    color: #999999;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.caffeena-messages {
+    margin-bottom: 20px;
+}
+
+.caffeena-message {
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #333333;
+}
+
+.caffeena-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.suggestion-btn {
+    padding: 8px 16px;
+    background: #f5f5f5;
+    color: #333333;
+    border: 1px solid #e5e5e5;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.suggestion-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #e5e5e5;
+        padding: 12px;
+    }
+    
+    .compose-btn {
+        width: auto;
+        margin-bottom: 12px;
+    }
+    
+    .sidebar-nav {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+    
+    .nav-item {
+        white-space: nowrap;
+        margin-right: 8px;
+    }
+    
+    .caffeena-section {
+        display: none;
+    }
+    
+    .search-bar {
+        width: 200px;
+    }
+    
+    .content-views {
+        padding: 16px;
+    }
+}

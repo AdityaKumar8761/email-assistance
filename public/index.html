@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hawk Mail</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login/Register Page -->
+    <div id="authPage" class="page">
+        <div class="auth-container">
+            <div class="logo">
+                <span class="logo-icon">🦅</span>
+                <span class="logo-text">Hawk Mail</span>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Login</button>
+                <button class="auth-tab" data-tab="register">Register</button>
+            </div>
+            
+            <form id="loginForm" class="auth-form active">
+                <input type="email" id="loginEmail" placeholder="Email" required>
+                <input type="password" id="loginPassword" placeholder="Password" required>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+            
+            <form id="registerForm" class="auth-form">
+                <input type="text" id="registerUsername" placeholder="Username" required>
+                <input type="email" id="registerEmail" placeholder="Email" required>
+                <input type="password" id="registerPassword" placeholder="Password" required>
+                <button type="submit" class="btn-primary">Register</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Email Interface -->
+    <div id="mainPage" class="page hidden">
+        <div class="app-container">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <div class="logo">
+                        <span class="logo-icon">🦅</span>
+                        <span class="logo-text">Hawk</span>
+                    </div>
+                </div>
+                
+                <button class="compose-btn">
+                    <span>✏️</span> Compose
+                </button>
+                
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-view="inbox">
+                        <span>📥</span> Inbox
+                        <span class="badge" id="inboxBadge">0</span>
+                    </button>
+                    <button class="nav-item" data-view="sent">
+                        <span>�</span> Sent
+                    </button>
+                    <button class="nav-item" data-view="starred">
+                        <span>⭐</span> Starred
+                    </button>
+                    <button class="nav-item" data-view="drafts">
+                        <span>📝</span> Drafts
+                    </button>
+                </nav>
+                
+                <div class="caffeena-section">
+                    <div class="caffeena-avatar">☕</div>
+                    <div class="caffeena-name">Caffeena</div>
+                    <button id="caffeenaBtn" class="btn-caffeena">Ask Caffeena</button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Header -->
+                <header class="header">
+                    <div class="search-bar">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" placeholder="Search in emails">
+                    </div>
+                    <div class="user-info">
+                        <span id="currentUser"></span>
+                        <button id="logoutBtn" class="btn-icon">🚪</button>
+                    </div>
+                </header>
+
+                <!-- Content Views -->
+                <div class="content-views">
+                    <!-- Inbox View -->
+                    <div id="inboxView" class="view active">
+                        <div class="view-header">
+                            <h2>Inbox</h2>
+                            <div class="action-buttons">
+                                <button class="btn-icon" title="Refresh">🔄</button>
+                                <button class="btn-icon" title="Settings">⚙️</button>
+                            </div>
+                        </div>
+                        <div id="inboxList" class="mail-list"></div>
+                    </div>
+
+                    <!-- Sent View -->
+                    <div id="sentView" class="view">
+                        <div class="view-header">
+                            <h2>Sent</h2>
+                            <div class="action-buttons">
+                                <button class="btn-icon" title="Refresh">🔄</button>
+                            </div>
+                        </div>
+                        <div id="sentList" class="mail-list"></div>
+                    </div>
+
+                    <!-- Starred View -->
+                    <div id="starredView" class="view">
+                        <div class="view-header">
+                            <h2>Starred</h2>
+                        </div>
+                        <div id="starredList" class="mail-list"></div>
+                    </div>
+
+                    <!-- Drafts View -->
+                    <div id="draftsView" class="view">
+                        <div class="view-header">
+                            <h2>Drafts</h2>
+                        </div>
+                        <div id="draftsList" class="mail-list"></div>
+                    </div>
+
+                    <!-- Compose View -->
+                    <div id="composeView" class="view">
+                        <div class="view-header">
+                            <h2>Compose Mail</h2>
+                            <button class="btn-secondary" id="closeCompose">✕</button>
+                        </div>
+                        <form id="composeForm" class="compose-form">
+                            <input type="email" id="recipientEmail" placeholder="To" required>
+                            <input type="text" id="subject" placeholder="Subject" required>
+                            <textarea id="body" placeholder="Write your message..." required></textarea>
+                            <div class="compose-actions">
+                                <button type="submit" class="btn-primary">Send</button>
+                                <button type="button" class="btn-secondary" id="saveDraft">Save Draft</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Mail Detail View -->
+                    <div id="mailDetailView" class="view">
+                        <div class="view-header">
+                            <button class="btn-secondary" id="backBtn">← Back</button>
+                            <div class="action-buttons">
+                                <button class="btn-icon" id="starBtn" title="Star">⭐</button>
+                                <button class="btn-icon" id="deleteBtn" title="Delete">🗑️</button>
+                            </div>
+                        </div>
+                        <div id="mailDetail" class="mail-detail"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Caffeena AI Modal -->
+        <div id="caffeenaModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="caffeena-header">
+                        <span class="caffeena-avatar-large">☕</span>
+                        <div>
+                            <h3>Caffeena</h3>
+                            <p class="caffeena-status">Your Email Assistant</p>
+                        </div>
+                    </div>
+                    <button id="closeModal" class="btn-icon">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div id="caffeenaMessages" class="caffeena-messages"></div>
+                    <div id="caffeenaSuggestions" class="caffeena-suggestions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
