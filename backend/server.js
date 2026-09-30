@@ -4,11 +4,11 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:8000', 'http://localhost:8001'],
+  origin: true,
   credentials: true
 }));
 app.use(express.json());
@@ -22,6 +22,7 @@ mongoose.connect(process.env.MONGODB_URL)
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/mail', require('./routes/mail'));
 app.use('/api/ai', require('./routes/ai'));
+app.use('/api/tasks', require('./routes/tasks'));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

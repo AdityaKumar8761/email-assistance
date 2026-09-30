@@ -1,6 +1,8 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const Mail = require('../models/Mail');
+const Task = require('../models/Task');
+const { analyzeEmail, generateReply, extractTasks, writeEmailFromTask } = require('../services/aiService');
 const router = express.Router();
 
 // Middleware to verify JWT token
@@ -21,7 +23,110 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Caffeena AI Agent - Hardcoded logic for mail assistance
+// Summarize email using AI
+router.post('/summarize', authenticateToken, async (req, res) => {
+  try {
+    const { sender, subject, body } = req.body;
+    
+    if (!sender || !subject || !body) {
+      return res.status(400).json({ message: 'Sender, subject, and body are required' });
+    }
+
+    const analysis = await analyzeEmail(sender, subject, body);
+    
+    res.json({
+      success: true,
+      analysis
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error summarizing email', error: error.message });
+  }
+});
+
+// Generate reply using AI
+router.post('/reply', authenticateToken, async (req, res) => {
+  try {
+    const { sender, subject, body, replyType } = req.body;
+    
+    if (!sender || !subject || !body) {
+      return res.status(400).json({ message: 'Sender, subject, and body are required' });
+    }
+
+    const reply = await generateReply(
+      { sender, subject, body },
+      replyType || 'professional'
+    );
+    
+    res.json({
+      success: true,
+      reply
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error generating reply', error: error.message });
+  }
+});
+
+// Extract tasks from email using AI
+router.post('/tasks', authenticateToken, async (req, res) => {
+  try {
+    const { sender, subject, body, mailId } = req.body;
+
+    if (!sender || !subject || !body) {
+      return res.status(400).json({ message: 'Sender, subject, and body are required' });
+    }
+
+    const tasks = await extractTasks(sender, subject, body);
+
+    // Auto-save extracted tasks to database
+    const savedTasks = [];
+    if (tasks.tasks && tasks.tasks.length > 0) {
+      for (const task of tasks.tasks) {
+        const newTask = new Task({
+          userId: req.user.userId,
+          title: task.description.substring(0, 100),
+          description: task.description,
+          priority: task.priority || 'medium',
+          dueDate: task.due_date || null,
+          assignedTo: task.assigned_to || null,
+          sourceEmailId: mailId || null
+        });
+
+        await newTask.save();
+        savedTasks.push(newTask);
+      }
+    }
+
+    res.json({
+      success: true,
+      tasks: tasks.tasks,
+      savedTasks
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error extracting tasks', error: error.message });
+  }
+});
+
+// Write email from task using AI
+router.post('/write', authenticateToken, async (req, res) => {
+  try {
+    const { task } = req.body;
+    
+    if (!task) {
+      return res.status(400).json({ message: 'Task description is required' });
+    }
+
+    const email = await writeEmailFromTask(task);
+    
+    res.json({
+      success: true,
+      email
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error writing email', error: error.message });
+  }
+});
+
+// Caffeena AI Agent - Hardcoded logic for mail assistance (legacy)
 router.post('/caffeena', authenticateToken, async (req, res) => {
   try {
     const { action, mailId, mailContent } = req.body;

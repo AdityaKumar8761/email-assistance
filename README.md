@@ -1,12 +1,28 @@
 # Hawk Mail System
 
-A full-stack email application with React frontend and Node.js backend, featuring an AI-powered assistant named Caffeena.
+A full-stack email application with React frontend and Rust backend, featuring an AI-powered assistant named Caffeena.
+
+## Rust Backend
+
+The active backend is in `backend-rust/`. It implements the same `/api` contract as the original Node service, including JWT authentication, password hashing, mail management, and Caffeena. It uses in-memory storage so it starts without MongoDB; data is cleared when the process stops.
+
+```bash
+cp backend-rust/.env.example backend-rust/.env
+cargo run --manifest-path backend-rust/Cargo.toml
+```
+
+The Rust API runs on `http://localhost:3000`. The frontend already uses this address by default. To use another API location, set `VITE_API_URL`, for example:
+
+```bash
+VITE_API_URL=http://localhost:3000/api npm --prefix frontend run dev
+```
 
 ## 🚀 Project Structure
 
 ```
 email-assistance-system/
-├── backend/              # Node.js/Express Backend
+├── backend-rust/         # Rust/Axum Backend (active)
+├── backend/              # Original Node.js/Express Backend
 │   ├── models/          # MongoDB models (User, Mail)
 │   ├── routes/          # API routes (auth, mail, AI)
 │   ├── server.js        # Main server file
