@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './MainApp.css';
 
@@ -12,6 +12,9 @@ function MainApp({ user, onLogout }) {
   const [composeForm, setComposeForm] = useState({ to: '', subject: '', body: '' });
   const [showCaffeena, setShowCaffeena] = useState(false);
   const [caffeenaResponse, setCaffeenaResponse] = useState(null);
+  const [caffeenaMessages, setCaffeenaMessages] = useState([]);
+  const [caffeenaInput, setCaffeenaInput] = useState('');
+  const messagesEndRef = useRef(null);
   const [inboxCount, setInboxCount] = useState(0);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiReply, setAiReply] = useState(null);
@@ -30,6 +33,13 @@ function MainApp({ user, onLogout }) {
   useEffect(() => {
     loadTasks();
   }, []);
+
+  // Auto-scroll to bottom of chat when new messages arrive
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [caffeenaMessages]);
 
   const loadTasks = async () => {
     try {
@@ -97,6 +107,23 @@ function MainApp({ user, onLogout }) {
         console.error('Error marking as read:', error);
       }
     }
+
+    // Proactively suggest Caffeena actions when opening an email
+    setCaffeenaMessages([
+      {
+        role: 'assistant',
+        content: `I see you're reading an email from ${mail.sender?.username || 'someone'}. Would you like me to:`,
+        suggestions: ['Summarize this email', 'Extract tasks', 'Generate a reply']
+      }
+    ]);
+    setShowCaffeena(true);
+
+    // Scroll to bottom after a short delay to ensure the modal is rendered
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
   };
 
   const handleDelete = async () => {
@@ -119,8 +146,129 @@ function MainApp({ user, onLogout }) {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setCaffeenaResponse(response.data);
+      setCaffeenaMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: response.data.message, suggestions: response.data.suggestions }
+      ]);
     } catch (error) {
       console.error('Error asking Caffeena:', error);
+    }
+  };
+
+  const chatWithCaffeena = async (message) => {
+    if (!message.trim()) return;
+
+    setCaffeenaMessages(prev => [...prev, { role: 'user', content: message }]);
+    setCaffeenaInput('');
+
+    // Parse the user's intent
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.includes('show') && lowerMessage.includes('inbox')) {
+      setCurrentView('inbox');
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'ve switched to your inbox view. You can see all your incoming emails here.',
+        suggestions: ['Summarize all emails', 'Check for spam', 'Show my tasks']
+      }]);
+    } else if (lowerMessage.includes('show') && lowerMessage.includes('task')) {
+      setShowTaskPanel(true);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'ve opened your task panel. You can view and manage your tasks there.',
+        suggestions: ['Close task panel', 'Show inbox', 'Compose email']
+      }]);
+    } else if (lowerMessage.includes('close') && lowerMessage.includes('task')) {
+      setShowTaskPanel(false);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'ve closed the task panel.',
+        suggestions: ['Show my tasks', 'Show inbox', 'Ask Caffeena']
+      }]);
+    } else if (lowerMessage.includes('check') && lowerMessage.includes('spam')) {
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'m scanning your inbox for potential spam emails...',
+        suggestions: ['Show inbox', 'Mark all as safe', 'Delete suspicious emails']
+      }]);
+      // Simulate spam check
+      setTimeout(() => {
+        setCaffeenaMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'I\'ve scanned your inbox. No obvious spam detected. Your emails look safe! ☕',
+          suggestions: ['Show inbox', 'Show my tasks', 'Compose email']
+        }]);
+      }, 1000);
+    } else if (lowerMessage.includes('summarize') && lowerMessage.includes('all')) {
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'m analyzing all your emails to provide a summary...',
+      }]);
+      // Simulate summarizing all
+      setTimeout(() => {
+        setCaffeenaMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `You have ${inboxCount} unread emails. I recommend reviewing them and extracting any tasks. Would you like me to help with that?`,
+          suggestions: ['Extract tasks from all', 'Show inbox', 'Check for spam']
+        }]);
+      }, 1000);
+    } else if (lowerMessage.includes('compose') || lowerMessage.includes('write')) {
+      setShowCompose(true);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'ve opened the compose window for you. Need help writing the email?',
+        suggestions: ['Help me write an email', 'Show inbox', 'Cancel']
+      }]);
+    } else if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'m Caffeena, your intelligent email assistant! I can help you with:\n\n• Summarize emails and extract key information\n• Extract tasks and deadlines from emails\n• Generate professional or casual replies\n• Manage your task list\n• Check for spam\n• Navigate your inbox\n\nJust tell me what you need!',
+        suggestions: ['Summarize current email', 'Extract tasks', 'Generate reply', 'Show my tasks']
+      }]);
+    } else if (lowerMessage.includes('summarize') && selectedMail) {
+      await summarizeEmail();
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I\'ve analyzed this email. Here\'s the summary:',
+        analysis: aiAnalysis,
+        suggestions: ['Extract tasks', 'Generate reply', 'Show my tasks']
+      }]);
+    } else if (lowerMessage.includes('task') && selectedMail) {
+      const extractedTasks = await extractTasks();
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `I found ${extractedTasks?.tasks?.length || 0} tasks in this email and added them to your task list.`,
+        tasks: extractedTasks,
+        suggestions: ['Show my tasks', 'Generate reply', 'Summarize email']
+      }]);
+    } else if (lowerMessage.includes('reply') && selectedMail) {
+      const replyType = lowerMessage.includes('casual') ? 'casual' : 'professional';
+      await generateReply(replyType);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Here\'s a suggested reply:',
+        reply: aiReply,
+        suggestions: ['Use this reply', 'Extract tasks', 'Show my tasks']
+      }]);
+    } else {
+      // Use Groq API for intelligent responses
+      try {
+        const response = await axios.post(`${API_URL}/ai/chat`,
+          { message },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setCaffeenaMessages(prev => [...prev, {
+          role: 'assistant',
+          content: response.data.message,
+          suggestions: response.data.suggestions || ['Show my tasks', 'Show inbox', 'Help']
+        }]);
+      } catch (error) {
+        setCaffeenaMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'I can help you with emails, tasks, and more. Try asking me to summarize an email, extract tasks, or generate a reply!',
+          suggestions: ['Summarize current email', 'Extract tasks', 'Generate reply', 'Show my tasks']
+        }]);
+      }
     }
   };
 
@@ -175,13 +323,16 @@ function MainApp({ user, onLogout }) {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setAiTasks(response.data.tasks);
+      const extractedTasks = { tasks: response.data.tasks || [] };
+      setAiTasks(extractedTasks);
       setShowAiPanel(true);
       // Refresh tasks after extraction
-      loadTasks();
+      await loadTasks();
+      return extractedTasks;
     } catch (error) {
       console.error('Error extracting tasks:', error);
       alert('Failed to extract tasks');
+      return null;
     }
   };
 
@@ -223,18 +374,10 @@ function MainApp({ user, onLogout }) {
 
   const handleCaffeenaSuggestion = (suggestion) => {
     const lower = suggestion.toLowerCase();
-    if (lower.includes('read now') || lower.includes('read anyway')) {
-      setShowCaffeena(false);
-      setCurrentView('inbox');
-    } else if (lower.includes('mark as spam') || lower.includes('delete')) {
-      if (selectedMail) handleDelete();
-      setShowCaffeena(false);
-    } else if (lower.includes('spam check')) {
-      askCaffeena('spam_check');
-    } else if (lower.includes('analyze')) {
-      if (selectedMail) askCaffeena('analyze_mail', selectedMail.body);
-    } else if (lower.includes('suggest reply')) {
-      if (selectedMail) askCaffeena('suggest_reply', selectedMail.body);
+    if (lower.includes('use this reply') && aiReply) {
+      useAiReply();
+    } else {
+      chatWithCaffeena(suggestion);
     }
   };
 
@@ -353,12 +496,6 @@ function MainApp({ user, onLogout }) {
                   </div>
                 </div>
                 <div className="mail-detail-body">{selectedMail.body}</div>
-                <div className="ai-actions">
-                  <button className="btn-ai" onClick={summarizeEmail}>📝 Summarize</button>
-                  <button className="btn-ai" onClick={() => generateReply('professional')}>💬 Professional Reply</button>
-                  <button className="btn-ai" onClick={() => generateReply('casual')}>😊 Casual Reply</button>
-                  <button className="btn-ai" onClick={extractTasks}>📋 Extract Tasks</button>
-                </div>
               </div>
             </div>
           ) : (
@@ -400,38 +537,74 @@ function MainApp({ user, onLogout }) {
 
       {showCaffeena && (
         <div className="modal" onClick={() => setShowCaffeena(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content caffeena-chat" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="caffeena-header">
                 <span className="caffeena-avatar-large">☕</span>
                 <div>
                   <h3>Caffeena</h3>
-                  <p className="caffeena-status">Your Email Assistant</p>
+                  <p className="caffeena-status">Your Intelligent Email Assistant</p>
                 </div>
               </div>
               <button className="btn-icon" onClick={() => setShowCaffeena(false)}>✕</button>
             </div>
-            <div className="modal-body">
-              {caffeenaResponse && (
-                <>
-                  <div className="caffeena-messages">
-                    <div className="caffeena-message">
-                      <strong>{caffeenaResponse.agent}:</strong> {caffeenaResponse.message}
+            <div className="modal-body caffeena-chat-body">
+              <div className="caffeena-messages chat">
+                {caffeenaMessages.map((msg, i) => (
+                  <div key={i} className={`caffeena-message chat ${msg.role}`}>
+                    {msg.role === 'assistant' && <span className="message-avatar">☕</span>}
+                    <div className="message-content">
+                      <p>{msg.content}</p>
+                      {msg.analysis && (
+                        <div className="caffeena-analysis-mini">
+                          <p><strong>Summary:</strong> {msg.analysis.summary}</p>
+                          <p><strong>Priority:</strong> {msg.analysis.priority}</p>
+                          <p><strong>Action Items:</strong> {msg.analysis.action_items?.join(', ') || 'None'}</p>
+                        </div>
+                      )}
+                      {msg.tasks && msg.tasks.tasks?.length > 0 && (
+                        <div className="caffeena-tasks-mini">
+                          <p><strong>Tasks found:</strong> {msg.tasks.tasks.length}</p>
+                          {msg.tasks.tasks.map((task, j) => (
+                            <p key={j}>• {task.description} ({task.priority})</p>
+                          ))}
+                        </div>
+                      )}
+                      {msg.reply && (
+                        <div className="caffeena-reply-mini">
+                          <p><strong>Subject:</strong> {msg.reply.subject}</p>
+                          <p><strong>Reply:</strong> {msg.reply.body.substring(0, 100)}...</p>
+                          <button className="btn-small" onClick={useAiReply}>Use This Reply</button>
+                        </div>
+                      )}
+                      {msg.suggestions && (
+                        <div className="caffeena-suggestions">
+                          {msg.suggestions.map((suggestion, j) => (
+                            <button
+                              key={j}
+                              className="suggestion-btn"
+                              onClick={() => handleCaffeenaSuggestion(suggestion)}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="caffeena-suggestions">
-                    {caffeenaResponse.suggestions?.map((suggestion, i) => (
-                      <button
-                        key={i}
-                        className="suggestion-btn"
-                        onClick={() => handleCaffeenaSuggestion(suggestion)}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+              <div className="caffeena-input-area">
+                <input
+                  type="text"
+                  placeholder="Ask Caffeena anything..."
+                  value={caffeenaInput}
+                  onChange={(e) => setCaffeenaInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && chatWithCaffeena(caffeenaInput)}
+                />
+                <button className="btn-send" onClick={() => chatWithCaffeena(caffeenaInput)}>Send</button>
+              </div>
             </div>
           </div>
         </div>

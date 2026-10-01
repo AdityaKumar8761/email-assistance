@@ -121,15 +121,23 @@ Required format:
  * Extract tasks from email content
  */
 async function extractTasks(sender, subject, body) {
-  const prompt = `You are a task extraction assistant.
+  const prompt = `You are a task extraction assistant. BE AGGRESSIVE in finding tasks.
 
-Analyze the email and extract actionable tasks for the recipient.
+Analyze the email and extract ALL actionable tasks, requests, deadlines, and action items for the recipient.
+
+Look for:
+- Explicit requests ("please do X", "can you Y")
+- Deadlines ("by Sunday", "by tomorrow", "this week")
+- Action verbs (push, submit, complete, review, etc.)
+- Assignments and responsibilities
+- Meeting requests
+- Deliverables
 
 Extract:
-1. Task description
-2. Due date (if mentioned)
-3. Priority (high/medium/low)
-4. Assigned person (if mentioned)
+1. Task description (be specific and detailed)
+2. Due date (if mentioned - parse relative dates like "this Sunday")
+3. Priority (high if urgent/deadline, medium if normal, low if optional)
+4. Assigned person (if someone is assigned a task)
 
 Return ONLY valid JSON with this structure:
 {
@@ -143,6 +151,7 @@ Return ONLY valid JSON with this structure:
     ]
 }
 
+IMPORTANT: Even subtle requests should be extracted as tasks. If there's any action required, create a task.
 If no tasks are found, return an empty tasks array.
 
 Email:
@@ -154,7 +163,7 @@ Body: ${body}`;
     const response = await groq.chat.completions.create({
       model: 'qwen/qwen3.8-27b',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.3
     });
 
     let content = response.choices[0].message.content;

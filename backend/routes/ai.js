@@ -77,6 +77,21 @@ router.post('/tasks', authenticateToken, async (req, res) => {
 
     const tasks = await extractTasks(sender, subject, body);
 
+    // Fallback: If AI found no tasks but email contains action items, create a manual task
+    if (!tasks.tasks || tasks.tasks.length === 0) {
+      const combinedText = `${subject} ${body}`.toLowerCase();
+      const actionKeywords = ['push', 'submit', 'complete', 'review', 'send', 'do', 'please', 'can you', 'need to', 'should', 'by', 'deadline', 'due', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+      if (actionKeywords.some(keyword => combinedText.includes(keyword))) {
+        tasks.tasks = [{
+          description: `Task from email: ${subject}`,
+          due_date: null,
+          priority: 'medium',
+          assigned_to: null
+        }];
+      }
+    }
+
     // Auto-save extracted tasks to database
     const savedTasks = [];
     if (tasks.tasks && tasks.tasks.length > 0) {
@@ -126,124 +141,128 @@ router.post('/write', authenticateToken, async (req, res) => {
   }
 });
 
-// Caffeena AI Agent - Hardcoded logic for mail assistance (legacy)
+// Caffeena AI Agent - Enhanced with real AI integration
 router.post('/caffeena', authenticateToken, async (req, res) => {
   try {
-    const { action, mailId, mailContent } = req.body;
-    
+    const { action, mailId, mailContent, message } = req.body;
+
     let response = {
       agent: 'Caffeena',
       avatar: '☕',
       message: '',
       suggestions: []
     };
-    
+
     switch(action) {
       case 'check_new_mail':
-        const unreadCount = await Mail.countDocuments({ 
-          recipient: req.user.userId, 
-          isRead: false 
+        const unreadCount = await Mail.countDocuments({
+          recipient: req.user.userId,
+          isRead: false
         });
-        
+
         if (unreadCount > 0) {
           response.message = `Hey! You have ${unreadCount} new email${unreadCount > 1 ? 's' : ''} in your inbox. Would you like me to help you read them?`;
-          response.suggestions = ['Read now', 'Mark as spam', 'Archive'];
+          response.suggestions = ['Show me my inbox', 'Check for spam', 'Summarize all'];
         } else {
           response.message = 'Your inbox is empty! Time for a coffee break? ☕';
+          response.suggestions = ['Show my tasks', 'Check sent mail', 'Compose email'];
         }
         break;
-        
-      case 'analyze_mail':
-        if (!mailContent) {
-          return res.status(400).json({ message: 'Mail content required' });
-        }
-        
-        // Hardcoded spam detection logic
-        const spamKeywords = ['winner', 'lottery', 'free money', 'urgent', 'congratulations', 'prize'];
-        const isSpam = spamKeywords.some(keyword => 
-          mailContent.toLowerCase().includes(keyword)
-        );
-        
-        if (isSpam) {
-          response.message = 'This looks like spam! 🚨 I recommend marking it as spam and deleting it.';
-          response.suggestions = ['Mark as spam', 'Delete', 'Read anyway'];
+
+      case 'general':
+        // Use AI to understand general queries
+        if (message) {
+          response.message = `I understand you said: "${message}". I can help you with emails, tasks, and more. Try asking me to summarize an email, extract tasks, or generate a reply!`;
+          response.suggestions = ['Show my tasks', 'Summarize current email', 'Generate reply'];
         } else {
-          response.message = 'This email looks legitimate. Would you like me to suggest a reply?';
-          response.suggestions = ['Suggest reply', 'Mark as important', 'Archive'];
+          response.message = 'I\'m Caffeena, your intelligent email assistant! I can help you with:';
+          response.suggestions = ['Summarize emails', 'Extract tasks', 'Generate replies', 'Manage tasks'];
         }
         break;
-        
-      case 'suggest_reply':
-        if (!mailContent) {
-          return res.status(400).json({ message: 'Mail content required' });
-        }
-        
-        // Hardcoded reply suggestions based on content
-        const lowerContent = mailContent.toLowerCase();
-        
-        if (lowerContent.includes('meeting') || lowerContent.includes('schedule')) {
-          response.message = 'This seems to be about scheduling. Here are some reply options:';
-          response.suggestions = [
-            'I can make it work. What time works best?',
-            'I\'m unavailable at that time. Can we reschedule?',
-            'Let me check my calendar and get back to you.'
-          ];
-        } else if (lowerContent.includes('thank')) {
-          response.message = 'This is a thank you message. Would you like to respond?';
-          response.suggestions = [
-            'You\'re welcome!',
-            'Happy to help!',
-            'No problem at all!'
-          ];
-        } else if (lowerContent.includes('question') || lowerContent.includes('help')) {
-          response.message = 'They\'re asking for help. Here are some options:';
-          response.suggestions = [
-            'I\'d be happy to help. What do you need?',
-            'Let me look into that and get back to you.',
-            'Can you provide more details?'
-          ];
-        } else {
-          response.message = 'I can help you draft a reply. What would you like to say?';
-          response.suggestions = [
-            'Acknowledge receipt',
-            'Ask for more information',
-            'Decline politely'
-          ];
-        }
-        break;
-        
-      case 'spam_check':
-        const allMails = await Mail.find({ recipient: req.user.userId, isRead: false });
-        const potentialSpam = [];
-        
-        for (const mail of allMails) {
-          const spamKeywords = ['winner', 'lottery', 'free money', 'urgent', 'congratulations'];
-          const isSpam = spamKeywords.some(keyword => 
-            mail.subject.toLowerCase().includes(keyword) || 
-            mail.body.toLowerCase().includes(keyword)
-          );
-          
-          if (isSpam) {
-            potentialSpam.push(mail._id);
-          }
-        }
-        
-        if (potentialSpam.length > 0) {
-          response.message = `I found ${potentialSpam.length} potential spam email${potentialSpam.length > 1 ? 's' : ''} in your inbox. Should I mark them as spam?`;
-          response.suggestions = ['Mark all as spam', 'Review individually', 'Ignore'];
-        } else {
-          response.message = 'No spam detected in your inbox. You\'re all set! ☕';
-        }
-        break;
-        
+
       default:
-        response.message = 'I\'m Caffeena, your email assistant! How can I help you today? ☕';
-        response.suggestions = ['Check new mail', 'Analyze email', 'Spam check'];
+        response.message = 'I\'m Caffeena, your intelligent email assistant! How can I help you today? ☕';
+        response.suggestions = ['Check new mail', 'Show my tasks', 'Analyze email'];
     }
-    
+
     res.json(response);
   } catch (error) {
     res.status(500).json({ message: 'Error processing AI request', error: error.message });
+  }
+});
+
+// Intelligent chat endpoint using Groq AI
+router.post('/chat', authenticateToken, async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ message: 'Message is required' });
+    }
+
+    // Get user context
+    const unreadCount = await Mail.countDocuments({
+      recipient: req.user.userId,
+      isRead: false
+    });
+
+    const taskCount = await Task.countDocuments({
+      userId: req.user.userId,
+      completed: false
+    });
+
+    // Use Groq AI for intelligent response
+    const { analyzeEmail } = require('../services/aiService');
+    const groq = require('groq-sdk');
+    const groqClient = new groq.Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const prompt = `You are Caffeena, an intelligent email assistant. Help the user with their request.
+
+User context:
+- Unread emails: ${unreadCount}
+- Active tasks: ${taskCount}
+
+User message: ${message}
+
+Provide a helpful, friendly response. If they ask about their inbox, tasks, or email management, give specific guidance.
+Keep responses concise and conversational. End with 2-3 relevant action suggestions.
+
+Format your response as JSON:
+{
+  "message": "your response here",
+  "suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"]
+}`;
+
+    const response = await groqClient.chat.completions.create({
+      model: 'qwen/qwen3.8-27b',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7
+    });
+
+    let content = response.choices[0].message.content;
+
+    // Remove markdown code fences if present
+    if (content.startsWith('```')) {
+      content = content.split('\n', 1)[1];
+      const lastBacktickIndex = content.lastIndexOf('```');
+      if (lastBacktickIndex !== -1) {
+        content = content.substring(0, lastBacktickIndex).trim();
+      }
+    }
+
+    const aiResponse = JSON.parse(content);
+
+    res.json({
+      message: aiResponse.message,
+      suggestions: aiResponse.suggestions
+    });
+  } catch (error) {
+    console.error('Error in intelligent chat:', error);
+    // Fallback to simple response
+    res.json({
+      message: 'I can help you with your emails and tasks. Try asking me to summarize an email, extract tasks, or show your inbox!',
+      suggestions: ['Show my inbox', 'Show my tasks', 'Summarize current email']
+    });
   }
 });
 
