@@ -180,7 +180,173 @@
 .user-info {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
+}
+
+.profile-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 170px;
+  padding: 5px 10px 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #333333;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.profile-trigger:hover,
+.profile-trigger:focus-visible {
+  background: #f5f6ff;
+  border-color: #dfe3ff;
+  outline: none;
+}
+
+.profile-trigger-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.profile-trigger-text strong {
+  max-width: 125px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-trigger-text small {
+  color: #8a8fa8;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.user-avatar,
+.mail-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-avatar-fallback,
+.profile-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #667eea;
+  color: #fff;
+  flex: 0 0 auto;
+}
+
+.user-info > .btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #69708a;
+  font-size: 16px;
+}
+
+.mail-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mail-avatar {
+  width: 24px;
+  height: 24px;
+}
+
+.profile-panel {
+  max-width: 420px;
+}
+
+.profile-body {
+  text-align: center;
+}
+
+.profile-body > p {
+  color: #666;
+  margin-top: 0;
+}
+
+.profile-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 12px;
+}
+
+.profile-dropzone {
+  margin: 12px 0 18px;
+  padding: 18px;
+  border: 2px dashed #aeb8ed;
+  border-radius: 10px;
+  background: #f7f8ff;
+  color: #5969c7;
+  cursor: pointer;
+}
+
+.profile-body form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.profile-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #555;
+  font-size: 13px;
+}
+
+.profile-body input,
+.profile-body textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.profile-body textarea {
+  min-height: 75px;
+  resize: vertical;
+}
+
+.new-mail-notice {
+  position: fixed;
+  right: 24px;
+  top: 24px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 320px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #667eea;
+  color: white;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(43, 54, 125, 0.3);
+  cursor: pointer;
+}
+
+.new-mail-notice span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Content Views */
@@ -232,6 +398,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  touch-action: pan-y;
 }
 
 .mail-item:hover {
@@ -255,6 +422,22 @@
 
 .mail-content {
   flex: 1;
+  min-width: 0;
+}
+
+.mail-delete-button {
+  flex: 0 0 auto;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.mail-delete-button:hover {
+  background: #fff0f0;
+  opacity: 1;
 }
 
 .mail-header {
@@ -372,6 +555,44 @@
 .mail-detail-body {
   line-height: 1.8;
   color: #333333;
+}
+
+.mail-attachments {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.mail-attachments h4 {
+  margin: 0 0 10px;
+  color: #333333;
+}
+
+.attachment-download {
+  display: block;
+  margin: 6px 0;
+  padding: 8px 12px;
+  border: 1px solid #d9def2;
+  border-radius: 6px;
+  background: #f7f8ff;
+  color: #4d5fc4;
+  cursor: pointer;
+}
+
+.compose-attachments {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attachment-chip {
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #f0f2f8;
+  color: #555;
+  font-size: 12px;
 }
 
 /* Buttons */

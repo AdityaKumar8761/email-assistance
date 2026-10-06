@@ -19,6 +19,28 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  avatarKey: {
+    type: String,
+    default: null
+  },
+  nickname: {
+    type: String,
+    trim: true,
+    maxlength: 80,
+    default: ''
+  },
+  companyName: {
+    type: String,
+    trim: true,
+    maxlength: 120,
+    default: ''
+  },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now

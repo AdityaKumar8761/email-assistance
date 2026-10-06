@@ -4,17 +4,29 @@ import './MainApp.css';
 
 const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3000/api`;
 
+const formatDateOnly = (value) => {
+  const dateText = typeof value === 'string' ? value.slice(0, 10) : '';
+  const dateParts = dateText.split('-').map(Number);
+  if (dateParts.length === 3 && dateParts.every(Number.isFinite)) {
+    return new Date(dateParts[0], dateParts[1] - 1, dateParts[2]).toLocaleDateString();
+  }
+  return new Date(value).toLocaleDateString();
+};
+
 function MainApp({ user, onLogout }) {
   const [currentView, setCurrentView] = useState('inbox');
   const [mails, setMails] = useState([]);
   const [selectedMail, setSelectedMail] = useState(null);
   const [showCompose, setShowCompose] = useState(false);
   const [composeForm, setComposeForm] = useState({ to: '', subject: '', body: '' });
+  const [composeAttachments, setComposeAttachments] = useState([]);
+  const [isSending, setIsSending] = useState(false);
   const [showCaffeena, setShowCaffeena] = useState(false);
   const [caffeenaResponse, setCaffeenaResponse] = useState(null);
   const [caffeenaMessages, setCaffeenaMessages] = useState([]);
   const [caffeenaInput, setCaffeenaInput] = useState('');
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [inboxCount, setInboxCount] = useState(0);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiReply, setAiReply] = useState(null);
@@ -22,6 +34,16 @@ function MainApp({ user, onLogout }) {
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [showTaskPanel, setShowTaskPanel] = useState(false);
+  const [profileUser, setProfileUser] = useState(user);
+  const [showProfile, setShowProfile] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const profileFileInputRef = useRef(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [newMailNotice, setNewMailNotice] = useState(null);
+  const initialInboxLoadedRef = useRef(false);
+  const knownMailIdsRef = useRef(new Set());
+  const swipeStartRef = useRef(null);
+  const [swipeOffsets, setSwipeOffsets] = useState({});
 
   const token = localStorage.getItem('token');
 
@@ -33,6 +55,145 @@ function MainApp({ user, onLogout }) {
   useEffect(() => {
     loadTasks();
   }, []);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/auth/profile`, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        setProfileUser(response.data.user);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
+    };
+    if (token) loadProfile();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    const pollInbox = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/mail/inbox`, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        const nextMails = response.data.mails;
+        const nextIds = new Set(nextMails.map(mail => mail._id));
+        if (initialInboxLoadedRef.current) {
+          const newMail = nextMails.find(mail => !knownMailIdsRef.current.has(mail._id));
+          if (newMail) {
+            setNewMailNotice(newMail);
+            playMailNotification();
+          }
+        } else {
+          initialInboxLoadedRef.current = true;
+        }
+        knownMailIdsRef.current = nextIds;
+        if (currentView === 'inbox') {
+          setMails(nextMails);
+          setInboxCount(nextMails.filter(mail => !mail.isRead).length);
+        }
+      } catch (error) {
+        console.error('Error refreshing inbox:', error);
+      }
+    };
+    pollInbox();
+    const interval = window.setInterval(pollInbox, 10000);
+    return () => window.clearInterval(interval);
+  }, [currentView, token]);
+
+  const playMailNotification = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const context = new AudioContext();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.2);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.2);
+      oscillator.addEventListener('ended', () => context.close());
+    } catch (error) {
+      console.warn('Mail notification sound unavailable:', error);
+    }
+  };
+
+  const openProfile = async () => {
+    setShowProfile(true);
+    try {
+      const response = await axios.get(`${API_URL}/auth/profile`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setProfileUser(response.data.user);
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
+
+  const changeAvatar = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) ||
+        file.size > 10 * 1024 * 1024) {
+      alert('Choose a JPG, PNG, WEBP, or GIF image up to 10 MB.');
+      event.target.value = '';
+      return;
+    }
+    setIsSavingAvatar(true);
+    try {
+      const presign = await axios.post(`${API_URL}/auth/profile/avatar/presign`, {
+        contentType: file.type,
+        size: file.size
+      }, { headers: { Authorization: 'Bearer ' + token } });
+      const upload = await fetch(presign.data.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      });
+      if (!upload.ok) throw new Error('Avatar upload failed');
+      const saved = await axios.put(`${API_URL}/auth/profile/avatar`, {
+        key: presign.data.key
+      }, { headers: { Authorization: 'Bearer ' + token } });
+      setProfileUser(saved.data.user);
+      localStorage.setItem('user', JSON.stringify(saved.data.user));
+    } catch (error) {
+      alert(`Failed to update profile picture: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsSavingAvatar(false);
+      event.target.value = '';
+    }
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const response = await axios.put(`${API_URL}/auth/profile`, {
+        nickname: profileUser.nickname || '',
+        companyName: profileUser.companyName || '',
+        bio: profileUser.bio || ''
+      }, { headers: { Authorization: 'Bearer ' + token } });
+      setProfileUser(response.data.user);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      alert('Profile updated successfully.');
+    } catch (error) {
+      alert(`Failed to update profile: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleProfileDrop = (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) changeAvatar({ target: { files: [file], value: '' } });
+  };
 
   // Auto-scroll to bottom of chat when new messages arrive
   useEffect(() => {
@@ -77,21 +238,154 @@ function MainApp({ user, onLogout }) {
 
   const handleCompose = async (e) => {
     e.preventDefault();
+    setIsSending(true);
     try {
+      let attachments = [];
+      if (composeAttachments.length > 0) {
+        const initiateResponse = await axios.post(`${API_URL}/mail/attachments/multipart/initiate`, {
+          files: composeAttachments.map(file => ({
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size
+          }))
+        }, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+
+        attachments = await Promise.all(initiateResponse.data.attachments.map(async (attachment, index) => {
+          const file = composeAttachments[index];
+          try {
+            const parts = [];
+            for (let start = 0, partNumber = 1; start < file.size; start += attachment.partSize, partNumber += 1) {
+              parts.push({ partNumber, blob: file.slice(start, Math.min(start + attachment.partSize, file.size)) });
+            }
+            const uploadedParts = [];
+
+            for (let start = 0; start < parts.length; start += 100) {
+              const batch = parts.slice(start, start + 100);
+              const presignResponse = await axios.post(`${API_URL}/mail/attachments/multipart/presign`, {
+                key: attachment.key,
+                uploadId: attachment.uploadId,
+                partNumbers: batch.map(part => part.partNumber)
+              }, { headers: { Authorization: 'Bearer ' + token } });
+
+              const uploaded = await Promise.all(presignResponse.data.urls.map(async ({ partNumber, url }) => {
+                let response;
+                for (let attempt = 0; attempt < 3; attempt += 1) {
+                  response = await fetch(url, { method: 'PUT', body: batch.find(part => part.partNumber === partNumber).blob });
+                  if (response.ok) break;
+                }
+                const etag = response?.headers.get('ETag');
+                if (!response?.ok || !etag) throw new Error(`Upload failed for ${file.name}, part ${partNumber}`);
+                return { ETag: etag, PartNumber: partNumber };
+              }));
+              uploadedParts.push(...uploaded);
+            }
+
+            await axios.post(`${API_URL}/mail/attachments/multipart/complete`, {
+              key: attachment.key,
+              uploadId: attachment.uploadId,
+              parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber)
+            }, { headers: { Authorization: 'Bearer ' + token } });
+            return attachment;
+          } catch (error) {
+            await axios.delete(`${API_URL}/mail/attachments/multipart`, {
+              data: { key: attachment.key, uploadId: attachment.uploadId },
+              headers: { Authorization: 'Bearer ' + token }
+            }).catch(() => {});
+            throw error;
+          }
+        }));
+      }
+
       await axios.post(`${API_URL}/mail/send`, {
         recipientEmail: composeForm.to,
         subject: composeForm.subject,
-        body: composeForm.body
+        body: composeForm.body,
+        attachments
       }, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: 'Bearer ' + token }
       });
       alert('Mail sent successfully!');
       setComposeForm({ to: '', subject: '', body: '' });
+      setComposeAttachments([]);
       setShowCompose(false);
       setCurrentView('sent');
     } catch (error) {
       console.error('Error sending mail:', error);
       alert(`Failed to send mail: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleAttachmentSelection = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > 10) {
+      alert('You can attach up to 10 files per mail.');
+      event.target.value = '';
+      return;
+    }
+    const oversized = files.find(file => file.size > 50 * 1024 * 1024 * 1024);
+    if (oversized) {
+      alert(`${oversized.name} is larger than the 50 GB limit.`);
+      event.target.value = '';
+      return;
+    }
+    setComposeAttachments(files);
+  };
+
+  const downloadAttachment = async (mailId, attachmentId) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/mail/${mailId}/attachments/${attachmentId}`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      window.open(response.data.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      alert(`Failed to download attachment: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
+  const deleteMail = async (mailId) => {
+    try {
+      await axios.delete(`${API_URL}/mail/${mailId}`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setMails(current => current.filter(mail => mail._id !== mailId));
+      setSelectedMail(current => current?._id === mailId ? null : current);
+      setSwipeOffsets(current => {
+        const next = { ...current };
+        delete next[mailId];
+        return next;
+      });
+    } catch (error) {
+      alert(`Failed to delete mail: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
+  const handleMailPointerDown = (event, mailId) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    swipeStartRef.current = { mailId, x: event.clientX };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleMailPointerMove = (event, mailId) => {
+    const swipe = swipeStartRef.current;
+    if (!swipe || swipe.mailId !== mailId) return;
+    const offset = Math.max(0, Math.min(event.clientX - swipe.x, 140));
+    if (offset > 0) setSwipeOffsets(current => ({ ...current, [mailId]: offset }));
+  };
+
+  const handleMailPointerUp = (event, mailId) => {
+    const swipe = swipeStartRef.current;
+    if (!swipe || swipe.mailId !== mailId) return;
+    const offset = event.clientX - swipe.x;
+    swipeStartRef.current = null;
+    if (offset >= 100) {
+      deleteMail(mailId);
+    } else {
+      setSwipeOffsets(current => ({ ...current, [mailId]: 0 }));
     }
   };
 
@@ -441,7 +735,17 @@ function MainApp({ user, onLogout }) {
             <input type="text" placeholder="Search in emails" />
           </div>
           <div className="user-info">
-            <span>{user?.username}</span>
+            <button className="profile-trigger" onClick={openProfile} title="Open profile">
+              {profileUser?.avatarUrl ? (
+                <img src={profileUser.avatarUrl} alt="" className="user-avatar" />
+              ) : (
+                <span className="user-avatar user-avatar-fallback">{profileUser?.username?.[0]?.toUpperCase()}</span>
+              )}
+              <span className="profile-trigger-text">
+                <strong>{profileUser?.nickname || profileUser?.username}</strong>
+                <small>Account settings</small>
+              </span>
+            </button>
             <button className="btn-icon" onClick={onLogout}>🚪</button>
           </div>
         </header>
@@ -474,8 +778,31 @@ function MainApp({ user, onLogout }) {
                   onChange={(e) => setComposeForm({...composeForm, body: e.target.value})}
                   required
                 />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleAttachmentSelection}
+                  hidden
+                />
+                <div className="compose-attachments">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    📎 Attach files
+                  </button>
+                  {composeAttachments.map(file => (
+                    <span key={`${file.name}-${file.lastModified}`} className="attachment-chip">
+                      {file.name}
+                    </span>
+                  ))}
+                </div>
                 <div className="compose-actions">
-                  <button type="submit" className="btn-primary">Send</button>
+                  <button type="submit" className="btn-primary" disabled={isSending}>
+                    {isSending ? 'Uploading...' : 'Send'}
+                  </button>
                 </div>
               </form>
             </div>
@@ -491,11 +818,29 @@ function MainApp({ user, onLogout }) {
                 <div className="mail-detail-header">
                   <div className="mail-detail-subject">{selectedMail.subject}</div>
                   <div className="mail-detail-meta">
-                    <span>From: {selectedMail.sender?.username || 'Unknown'}</span>
+                    <span className="mail-author">
+                      {selectedMail.sender?.avatarUrl && <img src={selectedMail.sender.avatarUrl} alt="" className="mail-avatar" />}
+                      From: {selectedMail.sender?.username || 'Unknown'}
+                    </span>
                     <span>{new Date(selectedMail.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
                 <div className="mail-detail-body">{selectedMail.body}</div>
+                {selectedMail.attachments?.length > 0 && (
+                  <div className="mail-attachments">
+                    <h4>Attachments</h4>
+                    {selectedMail.attachments.map(attachment => (
+                      <button
+                        key={attachment._id}
+                        type="button"
+                        className="attachment-download"
+                        onClick={() => downloadAttachment(selectedMail._id, attachment._id)}
+                      >
+                        📎 {attachment.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -511,13 +856,33 @@ function MainApp({ user, onLogout }) {
                     <div 
                       key={mail._id} 
                       className={`mail-item ${!mail.isRead ? 'unread' : ''}`}
+                      style={{ transform: `translateX(${swipeOffsets[mail._id] || 0}px)` }}
                       onClick={() => handleMailClick(mail)}
+                      onPointerDown={event => handleMailPointerDown(event, mail._id)}
+                      onPointerMove={event => handleMailPointerMove(event, mail._id)}
+                      onPointerUp={event => handleMailPointerUp(event, mail._id)}
                     >
                       <div className="mail-checkbox"></div>
                       <div className="mail-content">
                         <div className="mail-header">
                           <span className="mail-sender">
-                            {currentView === 'inbox' ? mail.sender?.username : mail.recipient?.username}
+                            <span className="mail-author">
+                              {(currentView === 'inbox' ? mail.sender : mail.recipient)?.avatarUrl ? (
+                                <img
+                                  src={(currentView === 'inbox' ? mail.sender : mail.recipient).avatarUrl}
+                                  alt=""
+                                  className="mail-avatar"
+                                />
+                              ) : (
+                                <span className="mail-avatar mail-avatar-fallback">
+                                  {(currentView === 'inbox'
+                                    ? mail.sender?.username
+                                    : mail.recipient?.username
+                                  )?.[0]?.toUpperCase()}
+                                </span>
+                              )}
+                              {(currentView === 'inbox' ? mail.sender?.username : mail.recipient?.username)}
+                            </span>
                           </span>
                           <span className="mail-date">
                             {new Date(mail.createdAt).toLocaleDateString()}
@@ -526,6 +891,19 @@ function MainApp({ user, onLogout }) {
                         <div className="mail-subject">{mail.subject}</div>
                         <div className="mail-preview">{mail.body.substring(0, 100)}...</div>
                       </div>
+                      <button
+                        type="button"
+                        className="mail-delete-button"
+                        title="Delete mail"
+                        aria-label={`Delete ${mail.subject}`}
+                        onPointerDown={event => event.stopPropagation()}
+                        onClick={event => {
+                          event.stopPropagation();
+                          deleteMail(mail._id);
+                        }}
+                      >
+                        🗑️
+                      </button>
                     </div>
                   ))
                 )}
@@ -705,7 +1083,7 @@ function MainApp({ user, onLogout }) {
                     <h4 className="task-title">{task.title}</h4>
                     <p className="task-description">{task.description}</p>
                     {task.dueDate && (
-                      <p className="task-due">📅 Due: {new Date(task.dueDate).toLocaleDateString()}</p>
+                      <p className="task-due">📅 Due: {formatDateOnly(task.dueDate)}</p>
                     )}
                     {task.assignedTo && (
                       <p className="task-assigned">👤 Assigned: {task.assignedTo}</p>
@@ -714,8 +1092,85 @@ function MainApp({ user, onLogout }) {
                 ))}
               </div>
             )}
+
           </div>
         </div>
+      )}
+
+      {showProfile && (
+              <div className="modal" onClick={() => setShowProfile(false)}>
+                <div className="modal-content profile-panel" onClick={event => event.stopPropagation()}>
+                  <div className="modal-header">
+                    <h3>Profile</h3>
+                    <button className="btn-icon" onClick={() => setShowProfile(false)}>✕</button>
+                  </div>
+                  <div className="modal-body profile-body">
+                    {profileUser?.avatarUrl ? (
+                      <img src={profileUser.avatarUrl} alt="Profile" className="profile-avatar" />
+                    ) : (
+                      <div className="profile-avatar profile-avatar-fallback">
+                        {profileUser?.username?.[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <h3>{profileUser?.username}</h3>
+                    <p>{profileUser?.email}</p>
+                    <input
+                      ref={profileFileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={changeAvatar}
+                      hidden
+                    />
+                    <form onSubmit={saveProfile}>
+                      <div
+                        className="profile-dropzone"
+                        onDragOver={event => event.preventDefault()}
+                        onDrop={handleProfileDrop}
+                        onClick={() => profileFileInputRef.current?.click()}
+                      >
+                        Drop an image here or click to choose
+                      </div>
+                      <label>
+                        Nickname
+                        <input
+                          value={profileUser?.nickname || ''}
+                          maxLength={80}
+                          onChange={event => setProfileUser({ ...profileUser, nickname: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Company
+                        <input
+                          value={profileUser?.companyName || ''}
+                          maxLength={120}
+                          onChange={event => setProfileUser({ ...profileUser, companyName: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Bio
+                        <textarea
+                          value={profileUser?.bio || ''}
+                          maxLength={500}
+                          onChange={event => setProfileUser({ ...profileUser, bio: event.target.value })}
+                        />
+                      </label>
+                      <button type="submit" className="btn-primary" disabled={isSavingProfile || isSavingAvatar}>
+                        {isSavingProfile ? 'Saving...' : 'Save profile'}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+      )}
+
+      {newMailNotice && (
+        <button className="new-mail-notice" onClick={() => {
+          setNewMailNotice(null);
+          setCurrentView('inbox');
+        }}>
+          <strong>New mail from {newMailNotice.sender?.username || 'someone'}</strong>
+          <span>{newMailNotice.subject}</span>
+        </button>
       )}
     </div>
   );

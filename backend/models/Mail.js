@@ -1,5 +1,28 @@
 const mongoose = require('mongoose');
 
+const attachmentSchema = new mongoose.Schema({
+  _id: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
+  },
+  key: {
+    type: String,
+    required: true
+  },
+  name: {
+    type: String,
+    required: true
+  },
+  contentType: {
+    type: String,
+    required: true
+  },
+  size: {
+    type: Number,
+    required: true
+  }
+}, { _id: false });
+
 const mailSchema = new mongoose.Schema({
   sender: {
     type: mongoose.Schema.Types.ObjectId,
@@ -19,6 +42,10 @@ const mailSchema = new mongoose.Schema({
   body: {
     type: String,
     required: true
+  },
+  attachments: {
+    type: [attachmentSchema],
+    default: []
   },
   isRead: {
     type: Boolean,

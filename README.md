@@ -86,6 +86,30 @@ npm run dev
 
 Backend will run on **http://localhost:3000**
 
+### S3 attachments
+
+Mail attachments use direct browser-to-S3 uploads with short-lived presigned URLs. Add these
+values to `backend/.env`:
+
+```text
+AWS_REGION=ap-south-1
+S3_BUCKET_NAME=mailhawk
+AWS_ACCESS_KEY_ID=your_iam_access_key
+AWS_SECRET_ACCESS_KEY=your_iam_secret_key
+```
+
+Keep the `mailhawk` bucket private; do not enable public read access. The IAM user used by
+the backend needs `s3:PutObject`, `s3:GetObject`, `s3:HeadObject`, `s3:DeleteObject`,
+`s3:AbortMultipartUpload`, and `s3:ListMultipartUploadParts` on
+`arn:aws:s3:::mailhawk/*`. Configure the bucket CORS policy to allow `PUT` from the
+frontend origin (`http://localhost:8000` during development), plus `GET` and `HEAD`.
+The application currently allows up to 10 attachments per mail and 50 GB per attachment.
+Uploads use 64 MB S3 multipart chunks, retry failed chunks up to three times, and abort
+incomplete uploads when a send fails.
+
+Add an S3 lifecycle rule to abort incomplete multipart uploads after 1 day. This prevents
+abandoned uploads from continuing to consume storage if a browser closes during a transfer.
+
 ### 2. Frontend Setup
 
 ```bash

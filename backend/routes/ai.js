@@ -2,7 +2,13 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const Mail = require('../models/Mail');
 const Task = require('../models/Task');
-const { analyzeEmail, generateReply, extractTasks, writeEmailFromTask } = require('../services/aiService');
+const {
+  analyzeEmail,
+  generateReply,
+  extractTasks,
+  writeEmailFromTask,
+  resolveRelativeDueDate
+} = require('../services/aiService');
 const router = express.Router();
 
 // Middleware to verify JWT token
@@ -85,7 +91,7 @@ router.post('/tasks', authenticateToken, async (req, res) => {
       if (actionKeywords.some(keyword => combinedText.includes(keyword))) {
         tasks.tasks = [{
           description: `Task from email: ${subject}`,
-          due_date: null,
+          due_date: resolveRelativeDueDate(`${subject} ${body}`),
           priority: 'medium',
           assigned_to: null
         }];

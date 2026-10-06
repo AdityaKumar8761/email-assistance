@@ -5,10 +5,36 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
 
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function resolveRelativeDueDate(text) {
+  const relativeDate = text.match(
+    /\b(?:by|due|deadline|on|for|before)\s+(?:is\s+)?(day after tomorrow|tomorrow|today)\b/i
+  )?.[1]?.toLowerCase();
+
+  if (!relativeDate) return null;
+
+  const daysFromToday = relativeDate === 'day after tomorrow'
+    ? 2
+    : relativeDate === 'tomorrow'
+      ? 1
+      : 0;
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + daysFromToday);
+  return formatDate(date);
+}
+
 /**
  * Analyze email and extract summary, action items, tech stack, deadline, priority
  */
 async function analyzeEmail(sender, subject, body) {
+  const currentDate = formatDate(new Date());
   const prompt = `You are an assistant that analyzes company emails.
 
 Analyze the email and return ONLY valid JSON.
@@ -38,6 +64,7 @@ Return this JSON structure:
 
 Sender: ${sender}
 Subject: ${subject}
+Today's date is ${currentDate}. Resolve relative deadlines such as "today" and "tomorrow" from this date.
 Email body:
 ${body}`;
 
@@ -59,7 +86,10 @@ ${body}`;
       }
     }
 
-    return JSON.parse(content);
+    const analysis = JSON.parse(content);
+    const relativeDeadline = resolveRelativeDueDate(`${subject} ${body}`);
+    if (relativeDeadline) analysis.deadline = relativeDeadline;
+    return analysis;
   } catch (error) {
     console.error('Error analyzing email:', error);
     throw new Error('Failed to analyze email');
@@ -121,6 +151,7 @@ Required format:
  * Extract tasks from email content
  */
 async function extractTasks(sender, subject, body) {
+  const currentDate = formatDate(new Date());
   const prompt = `You are a task extraction assistant. BE AGGRESSIVE in finding tasks.
 
 Analyze the email and extract ALL actionable tasks, requests, deadlines, and action items for the recipient.
@@ -157,6 +188,7 @@ If no tasks are found, return an empty tasks array.
 Email:
 From: ${sender}
 Subject: ${subject}
+Today's date is ${currentDate}. Resolve relative deadlines such as "today" and "tomorrow" from this date. Do not invent a date when no deadline is stated.
 Body: ${body}`;
 
   try {
@@ -177,7 +209,15 @@ Body: ${body}`;
       }
     }
 
-    return JSON.parse(content);
+    const result = JSON.parse(content);
+    const relativeDueDate = resolveRelativeDueDate(`${subject} ${body}`);
+    if (relativeDueDate && Array.isArray(result.tasks)) {
+      result.tasks = result.tasks.map(task => ({
+        ...task,
+        due_date: relativeDueDate
+      }));
+    }
+    return result;
   } catch (error) {
     console.error('Error extracting tasks:', error);
     throw new Error('Failed to extract tasks');
@@ -240,5 +280,6 @@ module.exports = {
   analyzeEmail,
   generateReply,
   extractTasks,
-  writeEmailFromTask
+  writeEmailFromTask,
+  resolveRelativeDueDate
 };
