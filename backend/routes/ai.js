@@ -7,6 +7,7 @@ const {
   generateReply,
   extractTasks,
   writeEmailFromTask,
+  improveEmailDraft,
   resolveRelativeDueDate
 } = require('../services/aiService');
 const router = express.Router();
@@ -144,6 +145,23 @@ router.post('/write', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Error writing email', error: error.message });
+  }
+});
+
+// Correct and format a draft without sending it.
+router.post('/improve-draft', authenticateToken, async (req, res) => {
+  try {
+    const { subject, body } = req.body;
+    if (typeof subject !== 'string' || !subject.trim() ||
+        typeof body !== 'string' || !body.trim()) {
+      return res.status(400).json({ message: 'Subject and body are required' });
+    }
+
+    const draft = await improveEmailDraft(subject.trim(), body.trim());
+    res.json({ success: true, draft });
+  } catch (error) {
+    console.error('Error improving email draft:', error);
+    res.status(500).json({ message: 'Error improving email draft', error: error.message });
   }
 });
 

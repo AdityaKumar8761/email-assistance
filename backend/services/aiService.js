@@ -276,10 +276,54 @@ ${task}`;
   }
 }
 
+async function improveEmailDraft(subject, body) {
+  const prompt = `You are an expert email editor.
+
+Correct grammar, spelling, punctuation, and awkward wording in this email.
+Improve formatting with clear paragraphs, while preserving the original meaning,
+facts, names, requests, and tone. Do not add information.
+Return ONLY valid JSON without markdown fences:
+{
+    "subject": "corrected subject",
+    "body": "corrected email body"
+}
+
+Subject:
+${subject}
+
+Body:
+${body}`;
+
+  try {
+    const response = await groq.chat.completions.create({
+      model: 'qwen/qwen3.8-27b',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2
+    });
+
+    let content = response.choices[0].message.content;
+    if (content.startsWith('```')) {
+      content = content.split('\n', 1)[1];
+      const lastBacktickIndex = content.lastIndexOf('```');
+      if (lastBacktickIndex !== -1) content = content.substring(0, lastBacktickIndex).trim();
+    }
+    const result = JSON.parse(content);
+    if (typeof result.subject !== 'string' || typeof result.body !== 'string' ||
+        !result.subject.trim() || !result.body.trim()) {
+      throw new Error('AI returned an incomplete email draft');
+    }
+    return { subject: result.subject.trim(), body: result.body.trim() };
+  } catch (error) {
+    console.error('Error improving email draft:', error);
+    throw new Error('Failed to improve email draft');
+  }
+}
+
 module.exports = {
   analyzeEmail,
   generateReply,
   extractTasks,
   writeEmailFromTask,
+  improveEmailDraft,
   resolveRelativeDueDate
 };

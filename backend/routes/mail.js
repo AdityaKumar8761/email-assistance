@@ -260,7 +260,7 @@ router.get('/:mailId/attachments/:attachmentId', authenticateToken, async (req, 
 router.get('/inbox', authenticateToken, async (req, res) => {
   try {
     const mails = await Mail.find({ recipient: req.user.userId })
-      .populate('sender', 'username email avatarKey')
+      .populate('sender', 'username email nickname avatarKey')
       .sort({ createdAt: -1 });
     const mailValues = await Promise.all(mails.map(async mail => {
       const value = mail.toObject();
@@ -276,17 +276,69 @@ router.get('/inbox', authenticateToken, async (req, res) => {
   }
 });
 
+// Search inbox messages for Caffeena and other authenticated clients.
+router.get('/search', authenticateToken, async (req, res) => {
+  try {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 160) : '';
+    const from = typeof req.query.from === 'string' ? req.query.from.trim().slice(0, 160) : '';
+    const unread = req.query.unread === 'true';
+    const read = req.query.read === 'true';
+    const mailFilter = { recipient: req.user.userId };
+
+    if (unread && read) {
+      return res.status(400).json({ message: 'Read and unread filters cannot be used together' });
+    }
+    if (unread) mailFilter.isRead = false;
+    if (read) mailFilter.isRead = true;
+    if (query) {
+      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const expression = new RegExp(escapedQuery, 'i');
+      mailFilter.$or = [{ subject: expression }, { body: expression }];
+    }
+    if (from) {
+      const escapedFrom = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const senderExpression = new RegExp(escapedFrom, 'i');
+      const matchingSenders = await User.find({
+        $or: [{ email: senderExpression }, { username: senderExpression }]
+      }).select('_id');
+      mailFilter.sender = { $in: matchingSenders.map(sender => sender._id) };
+    }
+
+    const mails = await Mail.find(mailFilter)
+      .populate('sender', 'username email nickname avatarKey')
+      .sort({ createdAt: -1 })
+      .limit(100);
+    const mailValues = await Promise.all(mails.map(async mail => {
+      const value = mail.toObject();
+      if (value.sender?.avatarKey) {
+        value.sender.avatarUrl = await userAvatarUrl(value.sender.avatarKey);
+      }
+      delete value.sender?.avatarKey;
+      return value;
+    }));
+    res.json({ mails: mailValues });
+  } catch (error) {
+    console.error('Error searching inbox:', error);
+    res.status(500).json({ message: 'Error searching inbox', error: error.message });
+  }
+});
+
 // Get sent mail
 router.get('/sent', authenticateToken, async (req, res) => {
   try {
     const mails = await Mail.find({ sender: req.user.userId })
-      .populate('recipient', 'username email avatarKey')
+      .populate('sender', 'username email nickname avatarKey')
+      .populate('recipient', 'username email nickname avatarKey')
       .sort({ createdAt: -1 });
     const mailValues = await Promise.all(mails.map(async mail => {
       const value = mail.toObject();
+      if (value.sender?.avatarKey) {
+        value.sender.avatarUrl = await userAvatarUrl(value.sender.avatarKey);
+      }
       if (value.recipient?.avatarKey) {
         value.recipient.avatarUrl = await userAvatarUrl(value.recipient.avatarKey);
       }
+      delete value.sender?.avatarKey;
       delete value.recipient?.avatarKey;
       return value;
     }));

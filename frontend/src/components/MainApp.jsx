@@ -13,6 +13,14 @@ const formatDateOnly = (value) => {
   return new Date(value).toLocaleDateString();
 };
 
+const getPersonLabel = (person) => {
+  if (!person) return 'Unknown';
+  if (typeof person === 'string') {
+    return /^[a-f\d]{24}$/i.test(person) ? 'Unknown' : person;
+  }
+  return person.nickname || person.username || person.email || 'Unknown';
+};
+
 function MainApp({ user, onLogout }) {
   const [currentView, setCurrentView] = useState('inbox');
   const [mails, setMails] = useState([]);
@@ -21,6 +29,7 @@ function MainApp({ user, onLogout }) {
   const [composeForm, setComposeForm] = useState({ to: '', subject: '', body: '' });
   const [composeAttachments, setComposeAttachments] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [isImprovingDraft, setIsImprovingDraft] = useState(false);
   const [showCaffeena, setShowCaffeena] = useState(false);
   const [caffeenaResponse, setCaffeenaResponse] = useState(null);
   const [caffeenaMessages, setCaffeenaMessages] = useState([]);
@@ -225,6 +234,53 @@ function MainApp({ user, onLogout }) {
     }
   };
 
+  const searchInboxWithCaffeena = async (message) => {
+    const fromMatch = message.match(/\b(?:from|by)\s+(.+?)(?=\s+(?:about|regarding|with|containing|that|which)\b|$)/i);
+    const emailMatch = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    const queryMatch = message.match(/\b(?:about|regarding|containing|with the word|for)\s+["']?(.+?)["']?$/i);
+    const params = new URLSearchParams();
+    const from = emailMatch?.[0] || fromMatch?.[1]?.trim();
+    const query = queryMatch?.[1]?.trim();
+    const unread = /\bunread|new\b/i.test(message);
+    const read = /\bread\b/i.test(message) && !unread;
+
+    if (from) params.set('from', from);
+    if (query && !/^mail|emails?$/i.test(query)) params.set('q', query);
+    if (unread) params.set('unread', 'true');
+    if (read) params.set('read', 'true');
+
+    try {
+      const response = await axios.get(`${API_URL}/mail/search?${params.toString()}`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setMails(response.data.mails);
+      setInboxCount(response.data.mails.filter(mail => !mail.isRead).length);
+      setCurrentView('inbox');
+      setSelectedMail(null);
+      setShowCompose(false);
+      const filters = [
+        from && `from ${from}`,
+        query && `about "${query}"`,
+        unread && 'unread',
+        read && 'read'
+      ].filter(Boolean);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.data.mails.length
+          ? `I found ${response.data.mails.length} email${response.data.mails.length === 1 ? '' : 's'}${filters.length ? ` ${filters.join(', ')}` : ''}.`
+          : `I couldn't find any emails${filters.length ? ` ${filters.join(', ')}` : ''}.`,
+        suggestions: ['Show my inbox', 'Find unread emails', 'Find emails about today']
+      }]);
+    } catch (error) {
+      console.error('Error searching inbox with Caffeena:', error);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I could not search your inbox right now. Please try again.',
+        suggestions: ['Show my inbox', 'Find unread emails']
+      }]);
+    }
+  };
+
   const loadSent = async () => {
     try {
       const response = await axios.get(`${API_URL}/mail/sent`, {
@@ -319,6 +375,32 @@ function MainApp({ user, onLogout }) {
     }
   };
 
+  const improveComposeDraft = async () => {
+    if (!composeForm.subject.trim() || !composeForm.body.trim()) {
+      alert('Enter a subject and message before improving the draft.');
+      return;
+    }
+    setIsImprovingDraft(true);
+    try {
+      const response = await axios.post(`${API_URL}/ai/improve-draft`, {
+        subject: composeForm.subject,
+        body: composeForm.body
+      }, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setComposeForm(current => ({
+        ...current,
+        subject: response.data.draft.subject,
+        body: response.data.draft.body
+      }));
+    } catch (error) {
+      console.error('Error improving compose draft:', error);
+      alert(`Failed to improve draft: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsImprovingDraft(false);
+    }
+  };
+
   const handleAttachmentSelection = (event) => {
     const files = Array.from(event.target.files || []);
     if (files.length > 10) {
@@ -402,22 +484,6 @@ function MainApp({ user, onLogout }) {
       }
     }
 
-    // Proactively suggest Caffeena actions when opening an email
-    setCaffeenaMessages([
-      {
-        role: 'assistant',
-        content: `I see you're reading an email from ${mail.sender?.username || 'someone'}. Would you like me to:`,
-        suggestions: ['Summarize this email', 'Extract tasks', 'Generate a reply']
-      }
-    ]);
-    setShowCaffeena(true);
-
-    // Scroll to bottom after a short delay to ensure the modal is rendered
-    setTimeout(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 100);
   };
 
   const handleDelete = async () => {
@@ -449,6 +515,41 @@ function MainApp({ user, onLogout }) {
     }
   };
 
+  const draftEmailWithCaffeena = async (message) => {
+    const recipientMatch = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    const recipientEmail = recipientMatch?.[0] || '';
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/ai/write`,
+        { task: message },
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      const email = response.data.email || {};
+      const to = email.recipient || recipientEmail;
+
+      if (!to || !email.subject || !email.body) {
+        throw new Error('The email draft was incomplete');
+      }
+
+      setComposeForm({
+        to,
+        subject: email.subject,
+        body: email.body
+      });
+      setComposeAttachments([]);
+      setShowCaffeena(false);
+      setShowCompose(true);
+    } catch (error) {
+      console.error('Error drafting email with Caffeena:', error);
+      setCaffeenaMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'I could not create a complete draft. Please include the recipient and what you want the email to say, then try again.',
+        suggestions: ['Draft a generic task regeneration request', 'Compose email']
+      }]);
+    }
+  };
+
   const chatWithCaffeena = async (message) => {
     if (!message.trim()) return;
 
@@ -458,11 +559,48 @@ function MainApp({ user, onLogout }) {
     // Parse the user's intent
     const lowerMessage = message.toLowerCase();
 
-    if (lowerMessage.includes('show') && lowerMessage.includes('inbox')) {
+    const requestsEmail = (
+      (lowerMessage.includes('send') || lowerMessage.includes('draft') || lowerMessage.includes('compose')) &&
+      (lowerMessage.includes('mail') || lowerMessage.includes('email')) &&
+      /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(message)
+    );
+    const searchesInbox = (
+      (lowerMessage.includes('find') || lowerMessage.includes('search') || lowerMessage.includes('look for')) &&
+      (lowerMessage.includes('mail') || lowerMessage.includes('email') || lowerMessage.includes('inbox'))
+    );
+    const asksAboutMail = (
+      (lowerMessage.includes('mail') || lowerMessage.includes('email')) &&
+      (
+        lowerMessage.includes('read') ||
+        lowerMessage.includes('unread') ||
+        lowerMessage.includes('from ') ||
+        lowerMessage.includes('by ') ||
+        lowerMessage.includes('is there') ||
+        lowerMessage.includes('do i have')
+      )
+    );
+
+    if (requestsEmail) {
+      await draftEmailWithCaffeena(message);
+    } else if (searchesInbox || asksAboutMail) {
+      await searchInboxWithCaffeena(message);
+    } else if (
+      (lowerMessage.includes('inbox') && (
+        lowerMessage.includes('show') ||
+        lowerMessage.includes('open') ||
+        lowerMessage.includes('check') ||
+        lowerMessage.includes('go')
+      )) ||
+      lowerMessage.trim() === 'inbox'
+    ) {
       setCurrentView('inbox');
+      setSelectedMail(null);
+      setShowCompose(false);
+      setShowCaffeena(false);
+      await loadInbox();
       setCaffeenaMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'I\'ve switched to your inbox view. You can see all your incoming emails here.',
+        content: 'Your inbox is open and refreshed.',
         suggestions: ['Summarize all emails', 'Check for spam', 'Show my tasks']
       }]);
     } else if (lowerMessage.includes('show') && lowerMessage.includes('task')) {
@@ -571,7 +709,7 @@ function MainApp({ user, onLogout }) {
     try {
       const response = await axios.post(`${API_URL}/ai/summarize`,
         {
-          sender: selectedMail.sender?.username || 'Unknown',
+          sender: getPersonLabel(selectedMail.sender),
           subject: selectedMail.subject,
           body: selectedMail.body
         },
@@ -590,7 +728,7 @@ function MainApp({ user, onLogout }) {
     try {
       const response = await axios.post(`${API_URL}/ai/reply`,
         {
-          sender: selectedMail.sender?.username || 'Unknown',
+          sender: getPersonLabel(selectedMail.sender),
           subject: selectedMail.subject,
           body: selectedMail.body,
           replyType
@@ -610,7 +748,7 @@ function MainApp({ user, onLogout }) {
     try {
       const response = await axios.post(`${API_URL}/ai/tasks`,
         {
-          sender: selectedMail.sender?.username || 'Unknown',
+          sender: getPersonLabel(selectedMail.sender),
           subject: selectedMail.subject,
           body: selectedMail.body,
           mailId: selectedMail._id
@@ -800,6 +938,14 @@ function MainApp({ user, onLogout }) {
                   ))}
                 </div>
                 <div className="compose-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={improveComposeDraft}
+                    disabled={isImprovingDraft || isSending}
+                  >
+                    {isImprovingDraft ? 'Improving...' : '✨ Fix grammar & format'}
+                  </button>
                   <button type="submit" className="btn-primary" disabled={isSending}>
                     {isSending ? 'Uploading...' : 'Send'}
                   </button>
@@ -819,13 +965,32 @@ function MainApp({ user, onLogout }) {
                   <div className="mail-detail-subject">{selectedMail.subject}</div>
                   <div className="mail-detail-meta">
                     <span className="mail-author">
-                      {selectedMail.sender?.avatarUrl && <img src={selectedMail.sender.avatarUrl} alt="" className="mail-avatar" />}
-                      From: {selectedMail.sender?.username || 'Unknown'}
+                      {(currentView === 'inbox' ? selectedMail.sender : selectedMail.recipient)?.avatarUrl && (
+                        <img
+                          src={(currentView === 'inbox' ? selectedMail.sender : selectedMail.recipient).avatarUrl}
+                          alt=""
+                          className="mail-avatar"
+                        />
+                      )}
+                      {currentView === 'inbox' ? 'From' : 'To'}: {
+                        getPersonLabel(currentView === 'inbox' ? selectedMail.sender : selectedMail.recipient)
+                      }
                     </span>
                     <span>{new Date(selectedMail.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
                 <div className="mail-detail-body">{selectedMail.body}</div>
+                <div className="mail-ai-actions">
+                  <button type="button" className="btn-secondary" onClick={summarizeEmail}>
+                    📝 Summarize
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={extractTasks}>
+                    ✅ Extract tasks
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => generateReply()}>
+                    ↩️ Generate reply
+                  </button>
+                </div>
                 {selectedMail.attachments?.length > 0 && (
                   <div className="mail-attachments">
                     <h4>Attachments</h4>
@@ -875,13 +1040,10 @@ function MainApp({ user, onLogout }) {
                                 />
                               ) : (
                                 <span className="mail-avatar mail-avatar-fallback">
-                                  {(currentView === 'inbox'
-                                    ? mail.sender?.username
-                                    : mail.recipient?.username
-                                  )?.[0]?.toUpperCase()}
+                                  {getPersonLabel(currentView === 'inbox' ? mail.sender : mail.recipient)[0]?.toUpperCase()}
                                 </span>
                               )}
-                              {(currentView === 'inbox' ? mail.sender?.username : mail.recipient?.username)}
+                              {getPersonLabel(currentView === 'inbox' ? mail.sender : mail.recipient)}
                             </span>
                           </span>
                           <span className="mail-date">

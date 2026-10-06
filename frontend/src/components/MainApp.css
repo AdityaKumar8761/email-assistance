@@ -557,6 +557,15 @@
   color: #333333;
 }
 
+.mail-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 0;
+  padding-top: 18px;
+  border-top: 1px solid #e5e5e5;
+}
+
 .mail-attachments {
   margin-top: 24px;
   padding-top: 16px;
