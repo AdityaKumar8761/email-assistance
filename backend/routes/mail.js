@@ -8,6 +8,7 @@ const {
   CreateMultipartUploadCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand
 } = require('@aws-sdk/client-s3');
@@ -18,6 +19,7 @@ const router = express.Router();
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024 * 1024;
 const MAX_ATTACHMENTS_PER_MAIL = 10;
 const MULTIPART_PART_SIZE = 64 * 1024 * 1024;
+const BACKEND_UPLOAD_LIMIT = 25 * 1024 * 1024;
 const bucket = process.env.S3_BUCKET_NAME || 'mailhawk';
 const awsRegion = process.env.AWS_REGION || 'ap-south-1';
 const hasAwsCredentials = Boolean(
@@ -180,6 +182,48 @@ router.delete('/attachments/multipart', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Error aborting multipart upload', error: error.message });
   }
 });
+
+router.post(
+  '/attachments/upload',
+  authenticateToken,
+  express.raw({ type: '*/*', limit: `${BACKEND_UPLOAD_LIMIT}b` }),
+  async (req, res) => {
+    try {
+      if (!requireAwsCredentials(res)) return;
+      const contentType = req.headers['content-type'] || 'application/octet-stream';
+      const size = Number(req.headers['content-length']);
+      if (!Buffer.isBuffer(req.body) || !Number.isInteger(size) ||
+          size <= 0 || size > BACKEND_UPLOAD_LIMIT || req.body.length !== size) {
+        return res.status(400).json({ message: 'Attachment must be between 1 byte and 25 MB' });
+      }
+
+      const name = typeof req.headers['x-file-name'] === 'string'
+        ? decodeURIComponent(req.headers['x-file-name']).trim().slice(0, 255)
+        : 'attachment';
+      const id = new (require('mongoose').Types.ObjectId)();
+      const key = `${req.user.userId}/${crypto.randomUUID()}`;
+      await s3.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: req.body,
+        ContentType: contentType,
+        ContentLength: size
+      }));
+      res.json({
+        attachment: {
+          id: id.toString(),
+          key,
+          name: name || 'attachment',
+          contentType,
+          size
+        }
+      });
+    } catch (error) {
+      console.error('Error uploading attachment through backend:', error);
+      res.status(500).json({ message: 'Error uploading attachment', error: error.message });
+    }
+  }
+);
 
 // Send mail
 router.post('/send', authenticateToken, async (req, res) => {

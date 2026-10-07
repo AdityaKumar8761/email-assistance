@@ -16,6 +16,9 @@ const s3 = new S3Client({
 const bucket = process.env.S3_BUCKET_NAME || 'mailhawk';
 const MAX_AVATAR_SIZE = 10 * 1024 * 1024;
 const allowedAvatarTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const hasAwsCredentials = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+);
 
 const authenticateToken = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -139,6 +142,11 @@ router.put('/profile', authenticateToken, async (req, res) => {
 
 router.post('/profile/avatar/presign', authenticateToken, async (req, res) => {
   try {
+    if (!hasAwsCredentials) {
+      return res.status(503).json({
+        message: 'S3 avatar uploads are not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in backend/.env.'
+      });
+    }
     const { contentType, size } = req.body;
     if (!allowedAvatarTypes.has(contentType) || !Number.isInteger(size) ||
         size <= 0 || size > MAX_AVATAR_SIZE) {
@@ -156,8 +164,55 @@ router.post('/profile/avatar/presign', authenticateToken, async (req, res) => {
   }
 });
 
+router.post(
+  '/profile/avatar/upload',
+  authenticateToken,
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], limit: '10mb' }),
+  async (req, res) => {
+    try {
+      if (!hasAwsCredentials) {
+        return res.status(503).json({
+          message: 'S3 avatar uploads are not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in backend/.env.'
+        });
+      }
+
+      const contentType = req.headers['content-type'];
+      const size = Number(req.headers['content-length']);
+      if (!allowedAvatarTypes.has(contentType) || !Number.isInteger(size) ||
+          size <= 0 || size > MAX_AVATAR_SIZE || !Buffer.isBuffer(req.body) || req.body.length !== size) {
+        return res.status(400).json({ message: 'Avatar must be a JPG, PNG, WEBP, or GIF up to 10 MB' });
+      }
+
+      const key = `avatars/${req.user.userId}/${crypto.randomUUID()}`;
+      await s3.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: req.body,
+        ContentType: contentType,
+        ContentLength: size
+      }));
+
+      const user = await User.findById(req.user.userId);
+      if (!user) return res.status(404).json({ message: 'User not found' });
+      const oldKey = user.avatarKey;
+      user.avatarKey = key;
+      await user.save();
+      if (oldKey) await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: oldKey }));
+      res.json({ user: publicUser(user, await avatarUrlFor(user.avatarKey)) });
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      res.status(500).json({ message: 'Error uploading avatar', error: error.message });
+    }
+  }
+);
+
 router.put('/profile/avatar', authenticateToken, async (req, res) => {
   try {
+    if (!hasAwsCredentials) {
+      return res.status(503).json({
+        message: 'S3 avatar uploads are not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in backend/.env.'
+      });
+    }
     const { key } = req.body;
     if (typeof key !== 'string' || !key.startsWith(`avatars/${req.user.userId}/`)) {
       return res.status(400).json({ message: 'Invalid avatar upload' });

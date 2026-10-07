@@ -101,8 +101,31 @@ AWS_SECRET_ACCESS_KEY=your_iam_secret_key
 Keep the `mailhawk` bucket private; do not enable public read access. The IAM user used by
 the backend needs `s3:PutObject`, `s3:GetObject`, `s3:HeadObject`, `s3:DeleteObject`,
 `s3:AbortMultipartUpload`, and `s3:ListMultipartUploadParts` on
-`arn:aws:s3:::mailhawk/*`. Configure the bucket CORS policy to allow `PUT` from the
-frontend origin (`http://localhost:8000` during development), plus `GET` and `HEAD`.
+`arn:aws:s3:::mailhawk/*`. Configure the bucket CORS policy to allow `PUT` from every
+actual frontend origin, including the current LAN origin (`http://10.12.115.65:8000`
+if that is the address used in the browser), plus `GET` and `HEAD`. Include `ETag` in
+`ExposeHeaders`. Mail attachments use this direct browser-to-S3 policy. Profile pictures
+are uploaded through the backend, so they do not require an additional browser-to-S3
+CORS rule.
+
+Example bucket CORS JSON (replace or add every frontend origin you use):
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:8000",
+      "http://127.0.0.1:8000",
+      "http://10.12.111.101:8000",
+      "http://10.12.115.65:8000"
+    ],
+    "AllowedMethods": ["GET", "HEAD", "PUT"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"]
+  }
+]
+```
+
 The application currently allows up to 10 attachments per mail and 50 GB per attachment.
 Uploads use 64 MB S3 multipart chunks, retry failed chunks up to three times, and abort
 incomplete uploads when a send fails.

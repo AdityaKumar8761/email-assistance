@@ -21,6 +21,14 @@ const getPersonLabel = (person) => {
   return person.nickname || person.username || person.email || 'Unknown';
 };
 
+const dedupeMails = (mailList) => {
+  const unique = new Map();
+  mailList.filter(mail => mail?._id).forEach(mail => unique.set(mail._id, mail));
+  return Array.from(unique.values()).sort(
+    (first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0)
+  );
+};
+
 function MainApp({ user, onLogout }) {
   const [currentView, setCurrentView] = useState('inbox');
   const [mails, setMails] = useState([]);
@@ -59,6 +67,34 @@ function MainApp({ user, onLogout }) {
   const [swipeOffsets, setSwipeOffsets] = useState({});
 
   const token = localStorage.getItem('token');
+  const cacheIdentity = profileUser?._id || user?._id || user?.email || 'current';
+  const inboxCacheKey = `hawk:mail-cache:${cacheIdentity}:inbox`;
+  const sentCacheKey = `hawk:mail-cache:${cacheIdentity}:sent`;
+
+  const readMailCache = (key) => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(key) || '[]');
+      return Array.isArray(cached) ? dedupeMails(cached) : [];
+    } catch (error) {
+      console.warn('Unable to read local mail cache:', error);
+      return [];
+    }
+  };
+
+  const writeMailCache = (key, mailList) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(dedupeMails(mailList)));
+    } catch (error) {
+      console.warn('Unable to save local mail cache:', error);
+    }
+  };
+
+  const setDisplayedMails = (mailList, cacheKey = null) => {
+    const uniqueMails = dedupeMails(mailList);
+    setMails(uniqueMails);
+    setInboxCount(uniqueMails.filter(mail => !mail.isRead).length);
+    if (cacheKey) writeMailCache(cacheKey, uniqueMails);
+  };
 
   useEffect(() => {
     if (currentView === 'inbox') loadInbox();
@@ -104,8 +140,7 @@ function MainApp({ user, onLogout }) {
         }
         knownMailIdsRef.current = nextIds;
         if (currentView === 'inbox') {
-          setMails(nextMails);
-          setInboxCount(nextMails.filter(mail => !mail.isRead).length);
+          setDisplayedMails(nextMails, inboxCacheKey);
         }
       } catch (error) {
         console.error('Error refreshing inbox:', error);
@@ -114,7 +149,7 @@ function MainApp({ user, onLogout }) {
     pollInbox();
     const interval = window.setInterval(pollInbox, 10000);
     return () => window.clearInterval(interval);
-  }, [currentView, token]);
+  }, [currentView, token, inboxCacheKey]);
 
   const playMailNotification = () => {
     try {
@@ -241,23 +276,19 @@ function MainApp({ user, onLogout }) {
     }
     setIsSavingAvatar(true);
     try {
-      const presign = await axios.post(`${API_URL}/auth/profile/avatar/presign`, {
-        contentType: file.type,
-        size: file.size
-      }, { headers: { Authorization: 'Bearer ' + token } });
-      const upload = await fetch(presign.data.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file
+      const saved = await axios.post(`${API_URL}/auth/profile/avatar/upload`, file, {
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': file.type
+        },
+        maxBodyLength: 10 * 1024 * 1024,
+        maxContentLength: 10 * 1024 * 1024
       });
-      if (!upload.ok) throw new Error('Avatar upload failed');
-      const saved = await axios.put(`${API_URL}/auth/profile/avatar`, {
-        key: presign.data.key
-      }, { headers: { Authorization: 'Bearer ' + token } });
       setProfileUser(saved.data.user);
       localStorage.setItem('user', JSON.stringify(saved.data.user));
     } catch (error) {
-      alert(`Failed to update profile picture: ${error.response?.data?.message || error.message}`);
+      const detail = error.response?.data?.message || error.message;
+      alert(`Failed to update profile picture: ${detail}. If this mentions CORS, add ${window.location.origin} to the mailhawk S3 bucket CORS policy.`);
     } finally {
       setIsSavingAvatar(false);
       event.target.value = '';
@@ -332,12 +363,13 @@ function MainApp({ user, onLogout }) {
   };
 
   const loadInbox = async () => {
+    const cachedMails = readMailCache(inboxCacheKey);
+    if (cachedMails.length > 0) setDisplayedMails(cachedMails);
     try {
       const response = await axios.get(`${API_URL}/mail/inbox`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMails(response.data.mails);
-      setInboxCount(response.data.mails.filter(m => !m.isRead).length);
+      setDisplayedMails(response.data.mails, inboxCacheKey);
     } catch (error) {
       console.error('Error loading inbox:', error);
     }
@@ -362,8 +394,7 @@ function MainApp({ user, onLogout }) {
       const response = await axios.get(`${API_URL}/mail/search?${params.toString()}`, {
         headers: { Authorization: 'Bearer ' + token }
       });
-      setMails(response.data.mails);
-      setInboxCount(response.data.mails.filter(mail => !mail.isRead).length);
+      setDisplayedMails(response.data.mails);
       setCurrentView('inbox');
       setSelectedMail(null);
       setShowCompose(false);
@@ -391,11 +422,13 @@ function MainApp({ user, onLogout }) {
   };
 
   const loadSent = async () => {
+    const cachedMails = readMailCache(sentCacheKey);
+    if (cachedMails.length > 0) setDisplayedMails(cachedMails);
     try {
       const response = await axios.get(`${API_URL}/mail/sent`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMails(response.data.mails);
+      setDisplayedMails(response.data.mails, sentCacheKey);
     } catch (error) {
       console.error('Error loading sent:', error);
     }
@@ -407,18 +440,30 @@ function MainApp({ user, onLogout }) {
     try {
       let attachments = [];
       if (composeAttachments.length > 0) {
-        const initiateResponse = await axios.post(`${API_URL}/mail/attachments/multipart/initiate`, {
-          files: composeAttachments.map(file => ({
-            name: file.name,
-            type: file.type || 'application/octet-stream',
-            size: file.size
-          }))
-        }, {
-          headers: { Authorization: 'Bearer ' + token }
-        });
+        attachments = await Promise.all(composeAttachments.map(async (file) => {
+          if (file.size <= 25 * 1024 * 1024) {
+            const response = await axios.post(`${API_URL}/mail/attachments/upload`, file, {
+              headers: {
+                Authorization: 'Bearer ' + token,
+                'Content-Type': file.type || 'application/octet-stream',
+                'X-File-Name': encodeURIComponent(file.name)
+              },
+              maxBodyLength: 25 * 1024 * 1024,
+              maxContentLength: 25 * 1024 * 1024
+            });
+            return response.data.attachment;
+          }
 
-        attachments = await Promise.all(initiateResponse.data.attachments.map(async (attachment, index) => {
-          const file = composeAttachments[index];
+          const initiateResponse = await axios.post(`${API_URL}/mail/attachments/multipart/initiate`, {
+            files: [{
+              name: file.name,
+              type: file.type || 'application/octet-stream',
+              size: file.size
+            }]
+          }, {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+          const attachment = initiateResponse.data.attachments[0];
           try {
             const parts = [];
             for (let start = 0, partNumber = 1; start < file.size; start += attachment.partSize, partNumber += 1) {
@@ -543,7 +588,11 @@ function MainApp({ user, onLogout }) {
       await axios.delete(`${API_URL}/mail/${mailId}`, {
         headers: { Authorization: 'Bearer ' + token }
       });
-      setMails(current => current.filter(mail => mail._id !== mailId));
+      setMails(current => {
+        const next = current.filter(mail => mail._id !== mailId);
+        writeMailCache(currentView === 'inbox' ? inboxCacheKey : sentCacheKey, next);
+        return next;
+      });
       setSelectedMail(current => current?._id === mailId ? null : current);
       setSwipeOffsets(current => {
         const next = { ...current };
@@ -583,6 +632,12 @@ function MainApp({ user, onLogout }) {
   const handleMailClick = async (mail) => {
     setSelectedMail(mail);
     if (!mail.isRead && currentView === 'inbox') {
+      const readMail = { ...mail, isRead: true };
+      setDisplayedMails(
+        mails.map(currentMail => currentMail._id === mail._id ? readMail : currentMail),
+        inboxCacheKey
+      );
+      setSelectedMail(readMail);
       try {
         await axios.put(`${API_URL}/mail/${mail._id}/read`, {}, {
           headers: { Authorization: `Bearer ${token}` }
