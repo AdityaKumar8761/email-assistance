@@ -34,7 +34,11 @@ function MainApp({ user, onLogout }) {
   const [caffeenaResponse, setCaffeenaResponse] = useState(null);
   const [caffeenaMessages, setCaffeenaMessages] = useState([]);
   const [caffeenaInput, setCaffeenaInput] = useState('');
+  const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const lastSpokenMessageIndexRef = useRef(-1);
   const fileInputRef = useRef(null);
   const [inboxCount, setInboxCount] = useState(0);
   const [aiAnalysis, setAiAnalysis] = useState(null);
@@ -133,6 +137,87 @@ function MainApp({ user, onLogout }) {
     }
   };
 
+  const stopVoiceListening = () => {
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  };
+
+  const speakText = (text) => {
+    if (!window.speechSynthesis || !text?.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startVoiceListening = () => {
+    if (!voiceModeEnabled) {
+      alert('Turn on Caffeena voice chat first.');
+      return;
+    }
+    if (isListening) {
+      stopVoiceListening();
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Voice input is not supported in this browser.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (transcript) {
+        setCaffeenaInput(transcript);
+        chatWithCaffeena(transcript);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Voice input error:', event.error);
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const handleVoiceToggle = () => {
+    setVoiceModeEnabled(current => {
+      if (!current) {
+        lastSpokenMessageIndexRef.current = caffeenaMessages.length - 1;
+      } else {
+        stopVoiceListening();
+      }
+      return !current;
+    });
+  };
+
   const openProfile = async () => {
     setShowProfile(true);
     try {
@@ -210,6 +295,30 @@ function MainApp({ user, onLogout }) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [caffeenaMessages]);
+
+  useEffect(() => {
+    if (!voiceModeEnabled) {
+      stopVoiceListening();
+      window.speechSynthesis?.cancel();
+      return;
+    }
+
+    const lastIndex = caffeenaMessages.length - 1;
+    const lastMessage = caffeenaMessages[lastIndex];
+    if (
+      lastMessage &&
+      lastMessage.role === 'assistant' &&
+      lastSpokenMessageIndexRef.current !== lastIndex
+    ) {
+      lastSpokenMessageIndexRef.current = lastIndex;
+      speakText(lastMessage.content);
+    }
+  }, [caffeenaMessages, voiceModeEnabled]);
+
+  useEffect(() => () => {
+    stopVoiceListening();
+    window.speechSynthesis?.cancel();
+  }, []);
 
   const loadTasks = async () => {
     try {
@@ -723,6 +832,14 @@ function MainApp({ user, onLogout }) {
     }
   };
 
+  const readSummaryAloud = () => {
+    if (!aiAnalysis?.summary) {
+      alert('Summarize the email first, then I can read the summary aloud.');
+      return;
+    }
+    speakText(aiAnalysis.summary);
+  };
+
   const generateReply = async (replyType = 'professional') => {
     if (!selectedMail) return;
     try {
@@ -981,9 +1098,19 @@ function MainApp({ user, onLogout }) {
                 </div>
                 <div className="mail-detail-body">{selectedMail.body}</div>
                 <div className="mail-ai-actions">
-                  <button type="button" className="btn-secondary" onClick={summarizeEmail}>
-                    📝 Summarize
-                  </button>
+                  <div className="mail-ai-stack">
+                    <button type="button" className="btn-secondary" onClick={summarizeEmail}>
+                      📝 Summarize
+                    </button>
+                    {/* <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={readSummaryAloud}
+                      disabled={!aiAnalysis?.summary}
+                    >
+                      🔊 Read summary
+                    </button> */}
+                  </div>
                   <button type="button" className="btn-secondary" onClick={extractTasks}>
                     ✅ Extract tasks
                   </button>
@@ -1086,7 +1213,16 @@ function MainApp({ user, onLogout }) {
                   <p className="caffeena-status">Your Intelligent Email Assistant</p>
                 </div>
               </div>
+            <div className="caffeena-header-actions">
+              <button
+                type="button"
+                className={`voice-toggle ${voiceModeEnabled ? 'active' : ''}`}
+                onClick={handleVoiceToggle}
+              >
+                {voiceModeEnabled ? '🎙️ Voice on' : '🔈 Voice off'}
+              </button>
               <button className="btn-icon" onClick={() => setShowCaffeena(false)}>✕</button>
+            </div>
             </div>
             <div className="modal-body caffeena-chat-body">
               <div className="caffeena-messages chat">
@@ -1143,6 +1279,15 @@ function MainApp({ user, onLogout }) {
                   onChange={(e) => setCaffeenaInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && chatWithCaffeena(caffeenaInput)}
                 />
+                <button
+                  type="button"
+                  className={`btn-secondary voice-listen-btn ${isListening ? 'listening' : ''}`}
+                  onClick={startVoiceListening}
+                  disabled={!voiceModeEnabled}
+                  title={voiceModeEnabled ? 'Speak your prompt' : 'Enable voice mode first'}
+                >
+                  {isListening ? '⏹ Stop' : '🎤 Mic'}
+                </button>
                 <button className="btn-send" onClick={() => chatWithCaffeena(caffeenaInput)}>Send</button>
               </div>
             </div>
@@ -1162,6 +1307,9 @@ function MainApp({ user, onLogout }) {
                 <div className="ai-analysis">
                   <h4>📝 Summary</h4>
                   <p>{aiAnalysis.summary}</p>
+                  <button type="button" className="btn-secondary ai-read-summary" onClick={readSummaryAloud}>
+                    🔊 Read summary aloud
+                  </button>
 
                   <h4>✅ Action Items</h4>
                   <ul>

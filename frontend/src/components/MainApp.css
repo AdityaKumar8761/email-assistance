@@ -566,6 +566,12 @@
   border-top: 1px solid #e5e5e5;
 }
 
+.mail-ai-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .mail-attachments {
   margin-top: 24px;
   padding-top: 16px;
@@ -681,6 +687,29 @@
   align-items: center;
   padding: 20px;
   border-bottom: 1px solid #e5e5e5;
+}
+
+.caffeena-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.voice-toggle {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #d9def2;
+  background: #f7f8ff;
+  color: #4d5fc4;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.voice-toggle.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
 }
 
 .caffeena-header {
@@ -824,6 +853,16 @@
   border-color: #667eea;
 }
 
+.voice-listen-btn {
+  min-width: 92px;
+}
+
+.voice-listen-btn.listening {
+  background: #ffe9ea;
+  border-color: #ffbdc2;
+  color: #b03b43;
+}
+
 .btn-send {
   padding: 10px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -912,6 +951,10 @@
   font-size: 14px;
   color: #666666;
   margin-bottom: 6px;
+}
+
+.ai-read-summary {
+  margin: 8px 0 16px;
 }
 
 .reply-content {
