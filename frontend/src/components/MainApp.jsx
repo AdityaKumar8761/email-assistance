@@ -63,6 +63,8 @@ function MainApp({ user, onLogout }) {
   const [newMailNotice, setNewMailNotice] = useState(null);
   const initialInboxLoadedRef = useRef(false);
   const knownMailIdsRef = useRef(new Set());
+  const pendingReadMailIdsRef = useRef(new Set());
+  const inboxRefreshVersionRef = useRef(0);
   const swipeStartRef = useRef(null);
   const [swipeOffsets, setSwipeOffsets] = useState({});
 
@@ -89,10 +91,14 @@ function MainApp({ user, onLogout }) {
     }
   };
 
-  const setDisplayedMails = (mailList, cacheKey = null) => {
-    const uniqueMails = dedupeMails(mailList);
+  const setDisplayedMails = (mailList, cacheKey = null, isInboxList = false) => {
+    const uniqueMails = dedupeMails(mailList).map(mail => (
+      pendingReadMailIdsRef.current.has(mail._id) && !mail.isRead
+        ? { ...mail, isRead: true }
+        : mail
+    ));
     setMails(uniqueMails);
-    setInboxCount(uniqueMails.filter(mail => !mail.isRead).length);
+    if (isInboxList) setInboxCount(uniqueMails.filter(mail => !mail.isRead).length);
     if (cacheKey) writeMailCache(cacheKey, uniqueMails);
   };
 
@@ -123,11 +129,16 @@ function MainApp({ user, onLogout }) {
   useEffect(() => {
     if (!token) return undefined;
     const pollInbox = async () => {
+      const refreshVersion = ++inboxRefreshVersionRef.current;
       try {
         const response = await axios.get(`${API_URL}/mail/inbox`, {
           headers: { Authorization: 'Bearer ' + token }
         });
+        if (refreshVersion !== inboxRefreshVersionRef.current) return;
         const nextMails = response.data.mails;
+        nextMails.forEach(mail => {
+          if (mail.isRead) pendingReadMailIdsRef.current.delete(mail._id);
+        });
         const nextIds = new Set(nextMails.map(mail => mail._id));
         if (initialInboxLoadedRef.current) {
           const newMail = nextMails.find(mail => !knownMailIdsRef.current.has(mail._id));
@@ -140,7 +151,11 @@ function MainApp({ user, onLogout }) {
         }
         knownMailIdsRef.current = nextIds;
         if (currentView === 'inbox') {
-          setDisplayedMails(nextMails, inboxCacheKey);
+          setDisplayedMails(nextMails, inboxCacheKey, true);
+        } else {
+          setInboxCount(nextMails.filter(mail => (
+            !mail.isRead && !pendingReadMailIdsRef.current.has(mail._id)
+          )).length);
         }
       } catch (error) {
         console.error('Error refreshing inbox:', error);
@@ -364,12 +379,17 @@ function MainApp({ user, onLogout }) {
 
   const loadInbox = async () => {
     const cachedMails = readMailCache(inboxCacheKey);
-    if (cachedMails.length > 0) setDisplayedMails(cachedMails);
+    if (cachedMails.length > 0) setDisplayedMails(cachedMails, null, true);
+    const refreshVersion = ++inboxRefreshVersionRef.current;
     try {
       const response = await axios.get(`${API_URL}/mail/inbox`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDisplayedMails(response.data.mails, inboxCacheKey);
+      if (refreshVersion !== inboxRefreshVersionRef.current) return;
+      response.data.mails.forEach(mail => {
+        if (mail.isRead) pendingReadMailIdsRef.current.delete(mail._id);
+      });
+      setDisplayedMails(response.data.mails, inboxCacheKey, true);
     } catch (error) {
       console.error('Error loading inbox:', error);
     }
@@ -588,6 +608,10 @@ function MainApp({ user, onLogout }) {
       await axios.delete(`${API_URL}/mail/${mailId}`, {
         headers: { Authorization: 'Bearer ' + token }
       });
+      const deletedMail = mails.find(mail => mail._id === mailId);
+      if (currentView === 'inbox' && deletedMail && !deletedMail.isRead) {
+        setInboxCount(count => Math.max(0, count - 1));
+      }
       setMails(current => {
         const next = current.filter(mail => mail._id !== mailId);
         writeMailCache(currentView === 'inbox' ? inboxCacheKey : sentCacheKey, next);
@@ -632,19 +656,30 @@ function MainApp({ user, onLogout }) {
   const handleMailClick = async (mail) => {
     setSelectedMail(mail);
     if (!mail.isRead && currentView === 'inbox') {
+      pendingReadMailIdsRef.current.add(mail._id);
+      inboxRefreshVersionRef.current += 1;
       const readMail = { ...mail, isRead: true };
       setDisplayedMails(
         mails.map(currentMail => currentMail._id === mail._id ? readMail : currentMail),
-        inboxCacheKey
+        inboxCacheKey,
+        true
       );
       setSelectedMail(readMail);
       try {
         await axios.put(`${API_URL}/mail/${mail._id}/read`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        loadInbox();
+        await loadInbox();
       } catch (error) {
+        pendingReadMailIdsRef.current.delete(mail._id);
         console.error('Error marking as read:', error);
+        const unreadMail = { ...mail, isRead: false };
+        setDisplayedMails(
+          mails.map(currentMail => currentMail._id === mail._id ? unreadMail : currentMail),
+          inboxCacheKey,
+          true
+        );
+        setSelectedMail(unreadMail);
       }
     }
 

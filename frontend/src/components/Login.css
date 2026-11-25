@@ -112,3 +112,124 @@
 .auth-switch a:hover {
   text-decoration: underline;
 }
+
+.auth-page {
+  min-height: 100vh;
+  min-height: 100svh;
+  width: 100%;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+  background: #fff;
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 430px;
+  padding: clamp(26px, 6vw, 42px);
+  border: 1px solid rgba(226, 231, 240, 0.9);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 56px rgba(34, 48, 82, 0.08);
+  animation: auth-enter 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.auth-container .logo {
+  margin-bottom: 32px;
+}
+
+.auth-container .logo-icon {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: #eaf1eb;
+  font-size: 25px;
+}
+
+.auth-container .logo-text {
+  color: #172033;
+  font-size: 25px;
+  font-weight: 750;
+  letter-spacing: -0.7px;
+}
+
+.auth-form {
+  gap: 14px;
+}
+
+.auth-form h2 {
+  margin-bottom: 5px;
+  color: #172033;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.auth-form input {
+  min-height: 48px;
+  padding: 12px 14px;
+  border-color: #e0e5ef;
+  border-radius: 10px;
+  color: #172033;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.auth-form input:focus {
+  border-color: #afc4b4;
+  box-shadow: 0 0 0 3px rgba(69, 107, 78, 0.09);
+}
+
+.auth-form .btn-primary {
+  min-height: 46px;
+  margin-top: 4px;
+  border-radius: 10px;
+  background: #2d4936;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.auth-form .btn-primary:hover {
+  background: #203a29;
+}
+
+.auth-switch {
+  margin-top: 24px;
+  color: #78839a;
+}
+
+.auth-switch a {
+  color: #3e6247;
+  font-weight: 650;
+}
+
+.error-message {
+  border: 1px solid #f4d8dc;
+  background: #fff3f4;
+  color: #a83242;
+}
+
+@media (max-width: 420px) {
+  .auth-page {
+    align-items: flex-start;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .auth-container {
+    margin-top: max(10px, env(safe-area-inset-top));
+    padding: 26px 20px;
+    border-radius: 16px;
+  }
+}
+
+@keyframes auth-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
